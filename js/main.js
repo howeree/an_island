@@ -1,148 +1,388 @@
-/* Game coordinator: daily choices, event pacing, and all interactive controls. */
+/* Game coordinator: deck instances, targeting, forecasts and round flow. */
 (function () {
   const data = window.IslandData;
   const eco = window.Ecosystem;
   const ui = window.IslandUI;
   const audio = window.IslandAudio;
+  const HAND_SIZE = 5;
+
+  function shuffle(items) {
+    const copy = items.slice();
+    for (let index = copy.length - 1; index > 0; index -= 1) {
+      const other = Math.floor(Math.random() * (index + 1));
+      [copy[index], copy[other]] = [copy[other], copy[index]];
+    }
+    return copy;
+  }
 
   const Game = {
     state: null,
-    cards: [],
     busy: false,
+    pendingCardUid: null,
+    uidCounter: 0,
 
-    drawCards() {
-      const available = data.cards.filter((card) => !card.minDay || card.minDay <= this.state.day);
-      let fresh = available.filter((card) => !this.state.recentCardIds.includes(card.id));
-      if (fresh.length < 3) fresh = available;
-      const shuffled = fresh.slice().sort(() => Math.random() - 0.5);
-      this.cards = shuffled.slice(0, 3);
+    makeInstance(cardId) { this.uidCounter += 1; return { uid: `card-${this.uidCounter}`, cardId }; },
+
+    setupDeck() {
+      this.state.upgrades = {};
+      this.state.energy = { current: 3, max: 3, reserve: 0 };
+      this.state.deck = {
+        drawPile: shuffle(data.starterDeck.map((id) => this.makeInstance(id))),
+        discardPile: [], hand: [], exhaustPile: []
+      };
+      this.drawCards(HAND_SIZE);
+    },
+
+    getInstance(uid) {
+      return ['hand', 'drawPile', 'discardPile', 'exhaustPile'].reduce((found, key) => found || this.state.deck[key].find((item) => item.uid === uid), null);
+    },
+    getInstanceCard(uid) {
+      const instance = this.getInstance(uid);
+      return instance ? eco.getCard(instance.cardId, this.state) : null;
+    },
+    getHandCards() {
+      return this.state.deck.hand.map((instance) => ({ instance, card: eco.getCard(instance.cardId, this.state) })).filter((entry) => entry.card);
+    },
+
+    recycleDeck() {
+      if (this.state.deck.drawPile.length || !this.state.deck.discardPile.length) return;
+      this.state.deck.drawPile = shuffle(this.state.deck.discardPile);
+      this.state.deck.discardPile = [];
+    },
+    drawCards(count) {
+      let drawn = 0;
+      while (drawn < count && this.state.deck.hand.length < 8) {
+        this.recycleDeck();
+        if (!this.state.deck.drawPile.length) break;
+        this.state.deck.hand.push(this.state.deck.drawPile.pop());
+        drawn += 1;
+      }
+      return drawn;
+    },
+
+    ensureForecasts() {
+      const queue = this.state.forecasts;
+      while (queue.length < 3) {
+        const lastDue = queue.length ? queue[queue.length - 1].dueTurn : Math.max(2, this.state.turn + 1);
+        const lastIds = queue.slice(-2).map((item) => item.crisisId);
+        let pool = data.crises.filter((crisis) => !lastIds.includes(crisis.id));
+        if (this.state.turn < 5) pool = pool.filter((crisis) => !['wildfire', 'rabbit_boom'].includes(crisis.id));
+        if (this.state.turn < 8) pool = pool.filter((crisis) => crisis.id !== 'rabbit_boom' || this.state.species.rabbit > 0);
+        if (!pool.length) pool = data.crises;
+        const crisis = pool[Math.floor(Math.random() * pool.length)];
+        const spacing = this.state.policies.water_watch && crisis.id === 'drought' ? 3 : 2;
+        const dueTurn = lastDue + spacing;
+        if (dueTurn > this.state.totalTurns) break;
+        queue.push({ crisisId: crisis.id, dueTurn });
+      }
+      queue.sort((a, b) => a.dueTurn - b.dueTurn);
     },
 
     startNew(showTutorial) {
       this.busy = false;
+      this.pendingCardUid = null;
+      this.uidCounter = 0;
       this.state = eco.createInitialState();
-      this.drawCards();
+      this.setupDeck();
+      this.ensureForecasts();
       ui.showScreen('game-screen');
-      ui.render(this.state, this.cards);
-      if (showTutorial) setTimeout(() => ui.showTutorial(0), 180);
+      ui.render(this.state, this);
+      if (showTutorial) ui.openGuide();
     },
 
-    start() {
-      const tutorialSeen = localStorage.getItem('island-100-days-tutorial-seen') === 'yes';
-      audio.click();
-      this.startNew(!tutorialSeen);
+    cancelTarget(showToast) {
+      if (!this.pendingCardUid) return;
+      this.pendingCardUid = null;
+      ui.render(this.state, this);
+      if (showToast) ui.toast('已取消选址，能量没有消耗。');
     },
 
-    maybeEvent() {
-      const day = this.state.day;
-      const chance = day >= 61 ? 0.36 : day >= 21 ? 0.29 : 0.20;
-      if (day - this.state.lastEventDay < 3 || Math.random() > chance) return null;
-      const candidates = data.events.filter((event) => event.condition(this.state, day));
-      if (!candidates.length) return null;
-      const event = candidates[Math.floor(Math.random() * candidates.length)];
-      const conditional = eco.applyEvent(this.state, event);
-      this.state.lastEventDay = day;
-      return { event, conditional };
-    },
-
-    selectCard(id) {
+    async selectCard(uid) {
       if (this.busy || !this.state) return;
-      const card = this.cards.find((item) => item.id === id);
-      if (!card) return;
-      this.busy = true;
-      audio.choice();
-      const conditionalNote = eco.applyCard(this.state, card);
-      const metrics = eco.simulate(this.state);
-      this.state.recentCardIds = [card.id, ...this.state.recentCardIds].slice(0, 4);
-      this.state.history.unshift({ day: this.state.day, title: card.title, icon: card.icon });
-      this.state.history = this.state.history.slice(0, 8);
-      this.state.turns += 1;
-
-      if (this.state.turns >= 100) {
-        this.state.day = 100;
-        this.state.lastLog = { type: 'choice', icon: '✦', title: '第 100 天的回响', text: '你的长期选择已经沉淀为这座岛的生态性格。' };
-        audio.success();
-        setTimeout(() => { ui.showResults(this.state); this.busy = false; }, 300);
+      const instance = this.state.deck.hand.find((item) => item.uid === uid);
+      if (!instance) return;
+      const card = eco.getCard(instance.cardId, this.state);
+      if (this.state.energy.current < card.cost) { ui.toast(`能量不足：${card.title}需要 ${card.cost} 点。`); return; }
+      if (card.target) {
+        const valid = eco.validTargets(this.state, card);
+        if (!valid.length) { ui.toast('当前没有满足条件的地块。查看牌面与地块相邻关系。'); return; }
+        this.pendingCardUid = uid;
+        ui.render(this.state, this);
+        ui.toast(`请选择一个发光地块使用「${card.title}」。`);
+        audio.click();
         return;
       }
+      await this.playInstance(uid, null);
+    },
 
-      const milestoneResult = eco.evaluateMilestone(this.state);
-      const eventResult = milestoneResult ? null : this.maybeEvent();
-      if (milestoneResult) {
-        this.state.lastLog = {
-          type: 'milestone', icon: milestoneResult.success ? '✦' : '◌', title: milestoneResult.success ? `${milestoneResult.name}已达成` : `${milestoneResult.name}未完成`,
-          text: milestoneResult.success ? `${milestoneResult.reward}。核心指标上限已提高。` : `仅完成 ${milestoneResult.passed} / ${milestoneResult.checks.length} 项目标；后续核心指标将受到限制。`
-        };
-      } else if (eventResult) {
-        this.state.lastLog = { type: 'event', icon: eventResult.event.icon, title: eventResult.event.title, text: `${eventResult.event.description}${eventResult.conditional ? ' ' + eventResult.conditional : ''}` };
-      } else {
-        const discovered = eco.getDiscovered(this.state).length;
-        const chainMessage = metrics.chainCount ? `现在已有 ${metrics.chainCount} 条主要食物链正在连结。` : '继续把植物、昆虫和栖息地连起来，食物链会慢慢出现。';
-        this.state.lastLog = { type: 'choice', icon: card.icon, title: card.title, text: `${card.reason}${conditionalNote ? ' ' + conditionalNote : ' ' + chainMessage}` };
-        if (discovered > 0 && discovered % 4 === 0) this.state.lastLog.text += ` 已发现 ${discovered} 种岛民。`;
+    async selectTile(tileId) {
+      if (this.busy || !this.state) return;
+      if (!this.pendingCardUid) { ui.showTileDetails(this.state, tileId); return; }
+      const card = this.getInstanceCard(this.pendingCardUid);
+      if (!card || !eco.validTargets(this.state, card).includes(Number(tileId))) {
+        ui.toast('这块地不满足卡牌条件，请选择发光地块。');
+        return;
       }
-      this.state.day += 1;
-      this.drawCards();
-      ui.render(this.state, this.cards);
+      const uid = this.pendingCardUid;
+      this.pendingCardUid = null;
+      await this.playInstance(uid, Number(tileId));
+    },
+
+    removeStatusFromDiscard(preferredId) {
+      const index = this.state.deck.discardPile.findIndex((instance) => {
+        const card = eco.getCard(instance.cardId, this.state);
+        return card.type === '负面' && (!preferredId || instance.cardId === preferredId);
+      });
+      if (index < 0) return null;
+      return this.state.deck.discardPile.splice(index, 1)[0];
+    },
+
+    resolvePlayedStatus(card) {
+      let candidates;
+      if (card.status === 'dry_soil') candidates = this.state.tiles.filter((tile) => ['forest', 'meadow', 'shrub'].includes(tile.terrain) && tile.stress > 0);
+      if (card.status === 'toxic_sediment') candidates = this.state.tiles.filter((tile) => ['stream', 'wetland'].includes(tile.terrain) && tile.pollution > 0);
+      if (card.status === 'overgrazing') candidates = this.state.tiles.filter((tile) => ['meadow', 'shrub'].includes(tile.terrain) && tile.stress > 0);
+      if (card.status === 'invasive_vine') candidates = this.state.tiles.filter((tile) => tile.stress > 0);
+      if (candidates && candidates.length) {
+        candidates.sort((a, b) => (b.stress + b.pollution) - (a.stress + a.pollution));
+        candidates[0].stress = Math.max(0, candidates[0].stress - 1);
+        candidates[0].pollution = Math.max(0, candidates[0].pollution - 1);
+      }
+      this.state.lastLog = { icon: card.icon, title: `处理：${card.title}`, text: '这张负面牌已从本局移除，并缓解了对应生态压力。' };
+    },
+
+    async playInstance(uid, targetId) {
+      const instance = this.state.deck.hand.find((item) => item.uid === uid);
+      if (!instance || this.busy) return;
+      const card = eco.getCard(instance.cardId, this.state);
+      if (this.state.energy.current < card.cost) return;
+      this.busy = true;
+      await ui.playCardAnimation(uid);
+      this.state.energy.current -= card.cost;
+      const discoveredBefore = new Set(this.state.discoveredNetworks);
+
+      const handIndex = this.state.deck.hand.findIndex((item) => item.uid === uid);
+      this.state.deck.hand.splice(handIndex, 1);
+      if (card.exhaust || card.type === '负面') this.state.deck.exhaustPile.push(instance);
+      else this.state.deck.discardPile.push(instance);
+
+      eco.playCard(this.state, card, targetId);
+      if (card.action === 'status') this.resolvePlayedStatus(card);
+      if (card.action === 'purge') {
+        const removed = this.removeStatusFromDiscard();
+        if (removed) this.state.lastLog = { icon: card.icon, title: card.title, text: `永久移除了「${eco.getCard(removed.cardId, this.state).title}」。` };
+        else { this.state.energy.current += 1; this.state.lastLog = { icon: card.icon, title: card.title, text: '弃牌堆没有负面牌，返还了1点能量。' }; }
+      }
+      if (card.action === 'cleanse_tile') {
+        const removed = this.removeStatusFromDiscard('invasive_vine');
+        if (removed) this.state.lastLog.text += ' 同时永久移除一张入侵藤蔓。';
+      }
+      if (card.energy) this.state.energy.current += card.energy;
+      if (card.draw) this.drawCards(card.draw);
+      eco.derive(this.state);
+      const newNetworks = this.state.discoveredNetworks.filter((id) => !discoveredBefore.has(id));
       this.busy = false;
-      if (milestoneResult) {
-        audio.success();
-        setTimeout(() => ui.showMilestone(milestoneResult), 260);
-      } else if (eventResult) {
-        audio.event();
-        setTimeout(() => ui.showEvent(eventResult.event, eventResult.conditional), 260);
+      audio.choice();
+      ui.render(this.state, this);
+      if (newNetworks.length) { audio.success(); ui.flashNetwork(newNetworks); }
+    },
+
+    addStatus(cardId) { this.state.deck.discardPile.push(this.makeInstance(cardId)); },
+
+    rewardOptions() {
+      const ownedCounts = {};
+      ['drawPile', 'discardPile', 'hand', 'exhaustPile'].forEach((key) => this.state.deck[key].forEach((instance) => { ownedCounts[instance.cardId] = (ownedCounts[instance.cardId] || 0) + 1; }));
+      const pool = data.cards.filter((card) => card.rarity !== '状态' && (card.unlockTurn || 0) <= this.state.turn + 1 && (ownedCounts[card.id] || 0) < 2);
+      return shuffle(pool).slice(0, 3).map((card) => eco.getCard(card.id, this.state));
+    },
+
+    upgradeOptions() {
+      const owned = new Set();
+      ['drawPile', 'discardPile', 'hand', 'exhaustPile'].forEach((key) => this.state.deck[key].forEach((instance) => owned.add(instance.cardId)));
+      return shuffle(data.cards.filter((card) => owned.has(card.id) && card.upgrade && !this.state.upgrades[card.id])).slice(0, 3);
+    },
+
+    async handleRewards(milestoneResult) {
+      if (this.state.turn % 2 === 0) {
+        const options = this.rewardOptions();
+        if (options.length) {
+          const choice = await ui.showReward(options);
+          if (choice) {
+            this.state.deck.discardPile.push(this.makeInstance(choice));
+            this.state.lastLog = { icon: '▰', title: '牌组获得新方案', text: `「${eco.getCard(choice, this.state).title}」已加入弃牌堆。` };
+          } else {
+            this.state.energy.reserve += 1;
+            this.state.lastLog = { icon: '⚡', title: '保持精简', text: '你跳过了卡牌奖励，下回合获得额外1点能量。' };
+          }
+        }
+      }
+      if (milestoneResult && milestoneResult.success && milestoneResult.turn % 4 === 0) {
+        const options = this.upgradeOptions();
+        if (options.length) {
+          const choice = await ui.showUpgrade(options);
+          this.state.upgrades[choice] = true;
+          this.state.lastLog = { icon: '✦', title: '行动方案已升级', text: `此后所有「${data.cards.find((card) => card.id === choice).title}」都会以强化形态出现。` };
+        }
       }
     },
 
-    restart() {
-      audio.click(); ui.closeModal(); this.startNew(false); ui.toast('一座新的岛屿正在等待你。');
-    },
+    async endRound() {
+      if (this.busy || !this.state) return;
+      this.busy = true;
+      this.pendingCardUid = null;
+      const heldStatusIds = this.state.deck.hand.map((instance) => eco.getCard(instance.cardId, this.state)).filter((card) => card.type === '负面').map((card) => card.id);
+      this.state.deck.discardPile.push(...this.state.deck.hand);
+      this.state.deck.hand = [];
+      eco.processRound(this.state, heldStatusIds);
+      if (heldStatusIds.includes('invasive_vine') && Math.random() < 0.4 && !this.state.policies.ranger_patrol) this.addStatus('invasive_vine');
 
-    finishTutorial() {
-      localStorage.setItem('island-100-days-tutorial-seen', 'yes');
-      ui.closeModal(); audio.success();
-    },
+      const due = this.state.forecasts.filter((forecast) => forecast.dueTurn <= this.state.turn);
+      this.state.forecasts = this.state.forecasts.filter((forecast) => forecast.dueTurn > this.state.turn);
+      for (const forecast of due) {
+        const crisis = data.crises.find((item) => item.id === forecast.crisisId);
+        const result = eco.resolveCrisis(this.state, crisis);
+        result.statusIds.forEach((id) => this.addStatus(id));
+        if (result.success && this.state.policies.ranger_patrol) this.removeStatusFromDiscard('disturbance');
+        audio.event();
+        await ui.showCrisis(crisis, result);
+      }
+      this.ensureForecasts();
 
-    share() {
-      if (!this.state) return;
-      const report = ui.ending(this.state);
-      const text = `我在《一座岛的100天》中让岛屿恢复到 ${report.recovery}/100，发现 ${report.metrics.discovered}/15 种生物，生态稳定性 ${Math.round(this.state.stats.stability)}。`;
-      const note = document.querySelector('#share-note');
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
-          if (note) note.textContent = '生态报告文字已复制，截图这张结果卡片分享吧！';
-          ui.toast('生态报告已复制');
-        }).catch(() => { if (note) note.textContent = '截图分享你的生态岛吧！'; });
-      } else if (note) note.textContent = '截图分享你的生态岛吧！';
-    },
+      const milestone = data.milestones.find((item) => item.turn === this.state.turn);
+      let milestoneResult = null;
+      if (milestone) {
+        milestoneResult = eco.evaluateMilestone(this.state, milestone);
+        this.state.milestones.records.push({ turn: milestone.turn, success: milestoneResult.success });
+        await ui.showMilestone(milestoneResult);
+      }
+      if (this.state.turn < this.state.totalTurns) await this.handleRewards(milestoneResult);
 
-    handleAction(action) {
-      if (action === 'start') this.start();
-      if (action === 'restart') this.restart();
-      if (action === 'close-modal') { audio.click(); ui.closeModal(); }
-      if (action === 'skip-tutorial') this.finishTutorial();
-      if (action === 'open-guide' || action === 'show-guide') { audio.click(); ui.openGuide(); }
-      if (action === 'open-codex') { audio.click(); ui.openCodex(this.state || eco.createInitialState()); }
-      if (action === 'open-network') { audio.click(); ui.openNetwork(this.state || eco.createInitialState()); }
-      if (action === 'share') this.share();
+      if (this.state.turn >= this.state.totalTurns) {
+        this.busy = false;
+        ui.renderResults(this.state, () => this.startNew(false));
+        return;
+      }
+      this.state.turn += 1;
+      this.state.day = (this.state.turn - 1) * 5 + 1;
+      if ([7, 14].includes(this.state.turn)) {
+        this.state.energy.max += 1;
+        ui.toast(`生态行动力上限提升为 ${this.state.energy.max}。`);
+      }
+      this.state.energy.current = this.state.energy.max + this.state.energy.reserve;
+      this.state.energy.reserve = 0;
+      this.drawCards(HAND_SIZE);
+      eco.derive(this.state);
+      this.busy = false;
+      ui.render(this.state, this);
     }
   };
 
+  window.Game = Game;
+
+  let suppressCardClickUntil = 0;
   document.addEventListener('click', (event) => {
-    const card = event.target.closest('[data-card-id]');
-    if (card) { Game.selectCard(card.dataset.cardId); return; }
-    const species = event.target.closest('[data-species-id]');
-    if (species) { audio.click(); ui.refreshCodex(Game.state || eco.createInitialState(), species.dataset.speciesId); return; }
-    const tutorial = event.target.closest('[data-tutorial-index]');
-    if (tutorial) {
-      const next = Number(tutorial.dataset.tutorialIndex);
-      audio.click();
-      if (next >= 4) Game.finishTutorial(); else ui.showTutorial(next);
+    const action = event.target.closest('[data-action]');
+    if (action) {
+      const name = action.dataset.action;
+      if (name === 'start') Game.startNew(true);
+      if (name === 'open-codex') ui.openCodex(Game.state);
+      if (name === 'open-network') ui.openNetwork(Game.state);
+      if (name === 'open-guide' || name === 'show-guide') ui.openGuide();
+      if (name === 'end-day') Game.endRound();
+      if (name === 'cancel-target') Game.cancelTarget(true);
+      if (name === 'restart' && Game.state && window.confirm('放弃当前岛屿并重新开始吗？')) Game.startNew(false);
       return;
     }
-    const control = event.target.closest('[data-action]');
-    if (control) Game.handleAction(control.dataset.action);
+    const tile = event.target.closest('[data-tile-id]');
+    if (tile && Game.state) { Game.selectTile(Number(tile.dataset.tileId)); return; }
+    const card = event.target.closest('[data-card-uid]');
+    if (card && Date.now() >= suppressCardClickUntil && !card.classList.contains('dragging-card')) ui.toast('请把卡牌向上拖动并松手使用。');
   });
 
-  window.IslandGame = Game;
+  document.addEventListener('keydown', (event) => {
+    const card = event.target.closest && event.target.closest('[data-card-uid]');
+    if (card && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      Game.selectCard(card.dataset.cardUid);
+    }
+    if (event.key === 'Escape' && Game.pendingCardUid) Game.cancelTarget(false);
+  });
+
+  let drag = null;
+  const DRAG_THRESHOLD = 92;
+  function restoreDraggedCard(animate) {
+    if (!drag) return;
+    const current = drag;
+    const restore = () => {
+      if (current.placeholder && current.placeholder.parentNode) current.placeholder.replaceWith(current.card);
+      current.card.classList.remove('dragging-card', 'drag-return');
+      current.card.removeAttribute('style');
+      document.body.classList.remove('card-drag-active');
+    };
+    if (animate && current.active) {
+      current.card.classList.add('drag-return');
+      current.card.style.left = `${current.rect.left}px`;
+      current.card.style.top = `${current.rect.top}px`;
+      setTimeout(restore, 170);
+    } else restore();
+  }
+
+  document.addEventListener('pointerdown', (event) => {
+    const card = event.target.closest('[data-card-uid]');
+    if (!card || event.button !== 0 || Game.busy) return;
+    const rect = card.getBoundingClientRect();
+    drag = {
+      card, uid: card.dataset.cardUid, pointerId: event.pointerId,
+      startX: event.clientX, startY: event.clientY, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top,
+      rect, active: false, placeholder: null, lastY: event.clientY
+    };
+    card.setPointerCapture && card.setPointerCapture(event.pointerId);
+  });
+
+  document.addEventListener('pointermove', (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    drag.lastY = event.clientY;
+    const upward = drag.startY - event.clientY;
+    const horizontal = Math.abs(event.clientX - drag.startX);
+    if (!drag.active && upward > 7 && upward > horizontal * 0.65) {
+      drag.active = true;
+      drag.placeholder = document.createElement('div');
+      drag.placeholder.className = 'card-placeholder';
+      drag.placeholder.style.width = `${drag.rect.width}px`;
+      drag.placeholder.style.height = `${drag.rect.height}px`;
+      drag.card.parentNode.insertBefore(drag.placeholder, drag.card);
+      document.body.appendChild(drag.card);
+      drag.card.classList.add('dragging-card');
+      Object.assign(drag.card.style, { position: 'fixed', width: `${drag.rect.width}px`, height: `${drag.rect.height}px`, zIndex: 4000, margin: '0', transform: 'none' });
+      document.body.classList.add('card-drag-active');
+    }
+    if (drag.active) {
+      event.preventDefault();
+      drag.card.style.left = `${event.clientX - drag.offsetX}px`;
+      drag.card.style.top = `${event.clientY - drag.offsetY}px`;
+      drag.card.classList.toggle('ready-to-play', drag.startY - event.clientY >= DRAG_THRESHOLD);
+      const zone = document.querySelector('#play-drop-zone');
+      if (zone) zone.classList.toggle('active', drag.startY - event.clientY >= DRAG_THRESHOLD);
+    }
+  }, { passive: false });
+
+  function finishDrag(event) {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const current = drag;
+    const success = current.active && current.startY - event.clientY >= DRAG_THRESHOLD;
+    document.querySelector('#play-drop-zone')?.classList.remove('active');
+    if (success) {
+      suppressCardClickUntil = Date.now() + 350;
+      restoreDraggedCard(false);
+      drag = null;
+      Game.selectCard(current.uid);
+    } else {
+      restoreDraggedCard(true);
+      drag = null;
+    }
+  }
+  document.addEventListener('pointerup', finishDrag);
+  document.addEventListener('pointercancel', finishDrag);
+
+  ui.showScreen('start-screen');
 })();

@@ -16,7 +16,7 @@
         <p class="eyebrow">100 DAYS OF BIODIVERSITY</p>
         <h1>一座岛的<br><em>100天</em></h1>
         <p class="tagline">让生命重新回到这座岛。</p>
-        <p class="start-intro">每天做一个温柔但重要的决定，让植物、昆虫、动物与栖息地重新连结。</p>
+        <p class="start-intro">经营七块有限土地，预判未来危机，用20个回合把栖息地重新连成一张会自我调节的生命网络。</p>
         <div class="start-actions">
           <button class="button primary large" data-action="start">开始恢复生态 <span>→</span></button>
           <button class="button ghost" data-action="open-codex">生态图鉴</button>
@@ -54,9 +54,11 @@
         <article class="metric-card chain"><span class="metric-icon">↝</span><div><small>食物链</small><strong id="metric-food-chain">3</strong></div></article>
       </section>
 
+      <section id="forecast-strip" class="forecast-strip" aria-label="未来生态危机"></section>
+
       <section class="island-layout">
         <div class="island-panel">
-          <div class="island-toolbar"><span id="stage-label" class="stage-pill">恢复初期</span><span id="scene-caption">荒岛正在等待第一株新芽。</span></div>
+          <div class="island-toolbar"><span id="stage-label" class="stage-pill">恢复初期</span><span id="scene-caption">荒岛正在等待第一株新芽。</span><button id="cancel-target-button" class="cancel-target hidden" data-action="cancel-target">取消选址</button></div>
           <div id="island-world" class="island-world" role="img" aria-label="岛屿生态景观"></div>
           <div id="island-legend" class="island-legend"></div>
         </div>
@@ -74,8 +76,17 @@
       </section>
 
       <section class="actions-section">
-        <div class="action-heading"><div><p class="kicker">今天能做什么？</p><h2>选择一项生态行动</h2></div><p id="choice-hint">每个选择都会留下长期的生态回响。</p></div>
+        <div class="action-heading">
+          <div><p class="kicker">生态行动牌组</p><h2>安排今天的恢复行动</h2></div>
+          <div class="turn-controls">
+            <div class="energy-orb" title="每回合恢复；跳过卡牌奖励可为下回合增加1点"><span>⚡</span><strong id="energy-current">3</strong><small>/ <b id="energy-max">3</b></small></div>
+            <button id="end-day-button" class="end-day-button" data-action="end-day">结束回合 <span>→</span></button>
+          </div>
+        </div>
+        <div id="play-drop-zone" class="play-drop-zone"><span>↑</span><b>松手使用卡牌</b></div>
+        <div id="combo-banner" class="combo-banner" aria-live="polite"></div>
         <div id="action-cards" class="action-cards"></div>
+        <div class="deck-status"><span>▰ 抽牌堆 <b id="draw-count">0</b></span><span>▱ 弃牌堆 <b id="discard-count">0</b></span><span>每次出牌消耗生态能量；结束回合后推进工程并结算危机</span></div>
       </section>
     </section>
 

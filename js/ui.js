@@ -1,227 +1,282 @@
-/* DOM rendering. The illustration is CSS and emoji based so the game works without any assets. */
+/* Rendering and lightweight modal helpers for the strategy-card interface. */
 (function () {
   const data = window.IslandData;
   const eco = window.Ecosystem;
   const $ = (selector) => document.querySelector(selector);
-  const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
+  const escapeHtml = (value) => String(value == null ? '' : value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
   let toastTimer;
 
   function showScreen(name) {
-    ['start-screen', 'game-screen', 'results-screen'].forEach((id) => $("#" + id).classList.toggle('hidden', id !== name));
+    ['start-screen', 'game-screen', 'results-screen'].forEach((id) => {
+      const element = $(`#${id}`);
+      if (element) element.classList.toggle('hidden', id !== name);
+    });
   }
 
-  function metric(id, value) {
-    const element = $(id);
+  function setText(selector, text, title) {
+    const element = $(selector);
     if (!element) return;
-    const next = Math.round(value);
-    if (Number(element.textContent) !== next) {
-      element.textContent = next;
+    if (element.textContent !== String(text)) {
+      element.textContent = text;
       element.classList.remove('number-pop');
       requestAnimationFrame(() => element.classList.add('number-pop'));
     }
+    if (title) element.title = title;
   }
 
-  function stageFor(state) { return eco.getStage(state.day); }
-  function statusPhrase(state) {
-    const s = state.stats;
-    if (s.biodiversity < 20) return '荒岛正在等待第一株新芽。';
-    if (s.wetland < 20) return '草地开始转绿，但水边仍然很脆弱。';
-    if (s.foodChain < 28) return '越来越多的生命留下来，食物链还在编织。';
-    if (s.stability < 55) return '生态网络已经出现，需要抵御接下来的波动。';
-    if (s.pollution > 45) return '生命蓬勃，但污染仍是岛屿的隐患。';
-    return '不同栖息地正在互相滋养，这座岛有了自己的节奏。';
+  function qualityClass(value) {
+    if (value < 22) return 'critical';
+    if (value < 42) return 'fragile';
+    if (value < 62) return 'recovering';
+    if (value < 82) return 'stable';
+    return 'thriving';
   }
 
   function renderStatus(state) {
-    const s = state.stats;
-    $('#day-label').textContent = `第 ${state.day} / 100 天`;
-    $('#day-progress').style.width = `${Math.max(1, state.turns)}%`;
-    $('#stage-label').textContent = stageFor(state).name;
-    $('#scene-caption').textContent = statusPhrase(state);
-    metric('#metric-biodiversity', s.biodiversity);
-    metric('#metric-stability', s.stability);
-    metric('#metric-habitat', s.habitat);
-    metric('#metric-food-chain', s.foodChain);
+    const startDay = (state.turn - 1) * 5 + 1;
+    const endDay = Math.min(100, state.turn * 5);
+    setText('#day-label', `第 ${startDay}–${endDay} 天 · 回合 ${state.turn}/20`);
+    $('#day-progress').style.width = `${Math.min(100, state.turn * 5)}%`;
+    const stage = eco.getStage(state.turn);
+    setText('#stage-label', stage.name);
+    setText('#scene-caption', state.pendingCardUid ? '选择发光地块以执行行动。' : stage.text);
+    [
+      ['#metric-biodiversity', state.stats.biodiversity],
+      ['#metric-stability', state.stats.stability],
+      ['#metric-habitat', state.stats.habitat],
+      ['#metric-food-chain', state.stats.foodChain]
+    ].forEach(([selector, value]) => {
+      setText(selector, eco.qualitative(value), `内部评估：${value}/100`);
+      const element = $(selector);
+      element.className = `quality-text ${qualityClass(value)}`;
+    });
   }
 
-  function position(index, seed, vertical) {
-    const left = 9 + ((seed * 17 + index * 29 + index * index * 5) % 78);
-    const top = vertical ? 14 + ((seed * 11 + index * 23) % 62) : 20 + ((seed * 19 + index * 17) % 54);
-    return `left:${left}%;top:${top}%;`;
-  }
-  function tokens(icon, className, count, seed) {
-    return Array.from({ length: Math.max(0, count) }, (_, index) => `<span class="scene-token ${className}" style="${position(index, seed, false)}">${icon}</span>`).join('');
-  }
-  function lifeTokens(id, count, state) {
-    const item = data.species.find((species) => species.id === id);
-    if (!item || state.species[id] < 5) return '';
-    const seed = id.split('').reduce((total, character) => total + character.charCodeAt(0), 0);
-    return Array.from({ length: count }, (_, index) => `<span class="scene-token creature ${id}" style="${position(index, seed, true)}" title="${item.name}">${item.icon}</span>`).join('');
-  }
-
-  function renderIsland(state) {
-    const s = state.stats;
-    const p = state.species;
-    const green = Math.round(31 + s.vegetation * 0.37);
-    const hue = Math.round(60 + s.vegetation * 0.42);
-    const treeCount = Math.min(10, Math.floor(p.trees / 9));
-    const flowerCount = Math.min(11, Math.floor(p.wildflowers / 7));
-    const grassCount = Math.min(15, 3 + Math.floor(p.grass / 7));
-    const shrubCount = Math.min(7, Math.floor(p.shrubs / 10));
-    const wetlandSize = Math.min(100, Math.max(0, s.wetland));
-    const animals = [
-      lifeTokens('bee', p.bee > 18 ? 2 : 1, state), lifeTokens('butterfly', p.butterfly > 18 ? 2 : 1, state), lifeTokens('dragonfly', 1, state),
-      lifeTokens('frog', 1, state), lifeTokens('waterbird', 1, state), lifeTokens('songbird', p.songbird > 24 ? 2 : 1, state),
-      lifeTokens('rabbit', p.rabbit > 25 ? 2 : 1, state), lifeTokens('deer', 1, state), lifeTokens('fox', 1, state), lifeTokens('owl', 1, state)
-    ].join('');
-    $('#island-world').innerHTML = `
-      <div class="sea-layer"><i class="wave-line line-one"></i><i class="wave-line line-two"></i><i class="wave-line line-three"></i></div>
-      <div class="sun-reflection"></div>
-      <div class="island-base" style="--land-hue:${hue};--land-light:${green}%;--wetland-size:${wetlandSize}%;">
-        <span class="shore shore-one"></span><span class="shore shore-two"></span>
-        ${s.wetland > 8 ? `<span class="wetland-pool"><i></i><b>〰</b></span>` : ''}
-        ${s.water > 42 ? '<span class="stream-path">〰</span>' : ''}
-        ${tokens('🌱', 'grass', grassCount, 7)}
-        ${tokens('🌿', 'shrub', shrubCount, 13)}
-        ${tokens('🌳', 'tree', treeCount, 23)}
-        ${tokens('🌼', 'flower', flowerCount, 31)}
-        ${s.wetland > 20 ? tokens('🪷', 'aquatic', Math.min(5, Math.floor(p.aquatic / 11)), 45) : ''}
-        ${animals}
-        ${s.pollution > 55 ? '<span class="smog smog-one">☁</span><span class="smog smog-two">☁</span>' : ''}
-      </div>
-      <span class="flying-bird bird-one">⌁</span><span class="flying-bird bird-two">⌁</span>
-      <div class="island-vignette"></div>`;
-    const discovered = eco.getDiscovered(state);
-    $('#island-legend').innerHTML = `<span><b>${discovered.length}</b> / 15 种已发现</span><span class="legend-dot"></span><span>水资源 ${Math.round(s.water)}</span><span class="legend-dot"></span><span>污染 ${Math.round(s.pollution)}</span>`;
+  function renderForecast(state) {
+    const root = $('#forecast-strip');
+    const forecasts = (state.forecasts || []).slice(0, 3);
+    root.innerHTML = `<div class="forecast-title"><small>危机预警</small><b>未来动向</b></div>${forecasts.map((forecast, index) => {
+      const crisis = data.crises.find((item) => item.id === forecast.crisisId);
+      const distance = Math.max(0, forecast.dueTurn - state.turn);
+      return `<article class="forecast-card ${index === 0 ? 'next' : ''}">
+        <span class="forecast-icon">${crisis.icon}</span>
+        <div><small>${distance === 0 ? '本回合结算' : `${distance} 回合后`}</small><strong>${escapeHtml(crisis.name)}</strong><p>${escapeHtml(crisis.intent)}</p></div>
+        <span class="forecast-help" title="应对：${escapeHtml(crisis.counter)}">?</span>
+      </article>`;
+    }).join('')}`;
   }
 
-  function renderBars(state) {
-    const items = [
-      { id: 'vegetation', icon: '🌱', name: '草地与植被', value: state.stats.vegetation, color: 'green' },
-      { id: 'forest', icon: '🌲', name: '森林', value: state.stats.forest, color: 'forest' },
-      { id: 'wetland', icon: '💧', name: '湿地', value: state.stats.wetland, color: 'water' },
-      { id: 'water', icon: '〰', name: '水资源', value: state.stats.water, color: 'blue' }
-    ];
-    $('#habitat-bars').innerHTML = items.map((item) => `<div class="habitat-row"><span>${item.icon}</span><div><div class="bar-label"><b>${item.name}</b><em>${Math.round(item.value)}</em></div><div class="bar-track"><i class="${item.color}" style="width:${item.value}%"></i></div></div></div>`).join('');
+  function speciesForTile(state, tile) {
+    const ids = [];
+    if (tile.terrain === 'meadow') ids.push('grass');
+    if (tile.terrain === 'shrub') ids.push('shrubs');
+    if (tile.terrain === 'forest') ids.push('trees', 'songbird');
+    if (tile.terrain === 'wetland') ids.push('aquatic', 'dragonfly', 'frog');
+    if (tile.terrain === 'coast') ids.push('waterbird');
+    if (state.introduced.rabbit === tile.id) ids.push('rabbit');
+    if (state.introduced.fox === tile.id) ids.push('fox');
+    if (tile.traits.includes('old_tree')) ids.push('owl');
+    return ids.filter((id) => state.species[id] >= 8).slice(-3).map((id) => data.species.find((item) => item.id === id).icon).join('');
   }
 
-  function renderStrategy(state) {
+  function renderIsland(state, game) {
+    const root = $('#island-world');
+    const pending = game && game.pendingCardUid ? game.getInstanceCard(game.pendingCardUid) : null;
+    const validIds = pending ? eco.validTargets(state, pending) : [];
+    state.pendingCardUid = game ? game.pendingCardUid : null;
+    root.className = `island-world strategy-board${pending ? ' targeting' : ''}`;
+    root.setAttribute('aria-label', '七块相连的岛屿生态地块');
+    root.innerHTML = `<div class="board-water water-a"></div><div class="board-water water-b"></div><div class="habitat-board">${state.tiles.map((tile) => {
+      const terrain = data.terrainMeta[tile.terrain];
+      const traits = tile.traits.map((trait) => `<span title="${escapeHtml(data.traitMeta[trait].name)}">${data.traitMeta[trait].icon}</span>`).join('');
+      const project = tile.project ? `<span class="tile-project"><i></i>${escapeHtml(tile.project.name)} · ${tile.project.remaining}回合</span>` : '';
+      const indicators = `${tile.pollution ? `<span class="tile-warning pollution" title="污染 ${tile.pollution}层">☣${tile.pollution}</span>` : ''}${tile.stress ? `<span class="tile-warning stress" title="生态压力 ${tile.stress}层">!${tile.stress}</span>` : ''}`;
+      const valid = validIds.includes(tile.id);
+      return `<button class="habitat-tile tile-${tile.id} terrain-${tile.terrain}${valid ? ' target-valid' : ''}${tile.project ? ' has-project' : ''}" data-tile-id="${tile.id}" ${pending && !valid ? 'aria-disabled="true"' : ''} style="--tile-color:${terrain.color}" title="${escapeHtml(terrain.hint)}">
+        <span class="tile-top"><b>${terrain.icon} ${terrain.name}</b><small>${tile.maturity ? `阶段 ${tile.maturity}/3` : '尚未恢复'}</small></span>
+        <span class="tile-life">${speciesForTile(state, tile)}</span>
+        <span class="tile-traits">${traits}</span>${indicators}${project}
+      </button>`;
+    }).join('')}</div>`;
+    const cancel = $('#cancel-target-button');
+    cancel.classList.toggle('hidden', !pending);
+    if (pending) cancel.textContent = `取消「${pending.title}」选址`;
+    $('#island-legend').innerHTML = `<span><i class="legend-dot project"></i>工程会跨回合推进</span><span><i class="legend-dot pressure"></i>污染与压力会削弱生境</span><span><i class="legend-dot target"></i>发光地块可选</span>`;
+  }
+
+  function renderSidebar(state) {
+    const root = $('#habitat-bars');
+    const terrainOrder = ['stream', 'meadow', 'shrub', 'forest', 'wetland', 'coast'];
+    root.innerHTML = terrainOrder.map((terrain) => {
+      const meta = data.terrainMeta[terrain];
+      const tiles = state.tiles.filter((tile) => tile.terrain === terrain);
+      const maturity = tiles.length ? Math.round(tiles.reduce((sum, tile) => sum + tile.maturity, 0) / tiles.length) : 0;
+      const condition = !tiles.length ? '缺失' : tiles.some((tile) => tile.stress || tile.pollution > 1) ? '承压' : maturity >= 3 ? '成熟' : maturity >= 2 ? '成长' : '幼年';
+      return `<div class="habitat-row"><span class="habitat-symbol" style="background:${meta.color}">${meta.icon}</span><div><b>${meta.name}</b><small>${tiles.length} 块 · ${condition}</small></div><i class="habitat-pips">${[1, 2, 3].map((level) => `<em class="${maturity >= level ? 'on' : ''}"></em>`).join('')}</i></div>`;
+    }).join('');
+
     const preview = eco.getMilestonePreview(state);
-    if (preview.complete) {
-      $('#strategy-card').innerHTML = `<div class="strategy-title"><span class="strategy-badge done">✦</span><div><p class="kicker">战略节点</p><h3>完整生态已解锁</h3></div></div><p class="strategy-copy">四个阶段目标均已完成。现在请守住这份来之不易的平衡。</p><div class="cap-note">核心指标上限：<b>100</b></div>`;
-      return;
-    }
-    const milestone = preview.milestone;
-    const daysLeft = Math.max(0, milestone.day - state.day + 1);
-    $('#strategy-card').innerHTML = `<div class="strategy-title"><span class="strategy-badge">${preview.completed + 1}</span><div><p class="kicker">阶段目标 · 第 ${milestone.day} 天前</p><h3>${escapeHtml(milestone.name)}</h3></div></div><p class="strategy-copy">${escapeHtml(milestone.description)}</p><div class="goal-list">${preview.checks.map((check) => `<div class="goal ${check.passed ? 'met' : ''}"><span>${check.passed ? '✓' : '○'}</span><b>${escapeHtml(check.label)}</b><em>${check.value} / ${check.target}</em></div>`).join('')}</div><div class="strategy-footer"><span>剩余 ${daysLeft} 天</span><span>${escapeHtml(milestone.reward)}</span></div>`;
+    $('#strategy-card').innerHTML = preview ? `<div class="card-heading"><div><p class="kicker">阶段目标 · 第${preview.day}天</p><h2>${escapeHtml(preview.name)}</h2></div><span>${preview.success ? '已就绪' : '规划中'}</span></div><p>${escapeHtml(preview.description)}</p><div class="milestone-mini">${preview.checks.map((check) => `<span class="${check.ok ? 'done' : ''}">${check.ok ? '✓' : '○'} ${escapeHtml(check.label)}</span>`).join('')}</div>` : `<p class="kicker">最终目标</p><h2>让岛屿能自己运转</h2><p>剩余回合用于补强最脆弱的生态结构。</p>`;
+
+    const networks = state.activeNetworks.map((id) => data.comboMeta[id]);
+    $('#insight-card').innerHTML = `<p class="kicker">现场记录</p><h2>${escapeHtml(state.lastLog.title)}</h2><p>${escapeHtml(state.lastLog.text)}</p>${networks.length ? `<div class="network-chips">${networks.map((network) => `<span title="${escapeHtml(network.text)}">${network.icon} ${network.name}</span>`).join('')}</div>` : '<small class="no-network">尚未形成稳定生态结构。卡牌之间的空间关系比单项数值更重要。</small>'}`;
   }
 
-  function renderInsight(state) {
-    const log = state.lastLog;
-    const eventClass = log.type === 'event' ? 'is-event' : log.type === 'choice' || log.type === 'milestone' ? 'is-choice' : '';
-    const label = log.type === 'event' ? '生态事件' : log.type === 'milestone' ? '战略节点结算' : log.type === 'choice' ? '今日回响' : '岛屿观察';
-    $('#insight-card').innerHTML = `<div class="insight-icon ${eventClass}">${log.icon}</div><div><p class="kicker">${label}</p><h3>${escapeHtml(log.title)}</h3><p>${escapeHtml(log.text)}</p></div>`;
+  function renderCards(state, game) {
+    const root = $('#action-cards');
+    const cards = game.getHandCards();
+    root.innerHTML = cards.map(({ instance, card }, index) => {
+      const canAfford = state.energy.current >= card.cost;
+      const targets = card.target ? eco.validTargets(state, card).length : 1;
+      const unplayable = !canAfford || targets === 0 || game.busy;
+      const selected = game.pendingCardUid === instance.uid;
+      const targetText = card.target ? `${targets} 个可选地块` : card.action === 'policy' ? '持续生效' : card.action === 'status' ? '打出后移除' : '立即行动';
+      return `<article class="action-card ${card.type === '负面' ? 'status-card' : ''} ${selected ? 'selected' : ''} ${unplayable ? 'unplayable' : ''}" data-card-uid="${instance.uid}" data-card-index="${index}" tabindex="0" role="button" aria-label="向上拖动使用${escapeHtml(card.title)}">
+        <div class="card-cost">${card.cost}</div><div class="card-rarity">${escapeHtml(card.rarity)}</div>
+        <div class="card-art"><span>${card.icon}</span><i></i></div>
+        <div class="card-copy"><small>${escapeHtml(card.type)}${card.upgraded ? ' · 已升级' : ''}</small><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.text)}</p></div>
+        <div class="card-target-hint">${card.target ? '⌖' : '◇'} ${escapeHtml(targetText)}</div>
+        <div class="drag-instruction"><span>↑</span> 向上拖动</div>
+      </article>`;
+    }).join('') || '<div class="empty-hand">手牌已空。你仍可提前结束本回合。</div>';
+    setText('#energy-current', state.energy.current);
+    setText('#energy-max', state.energy.max);
+    setText('#draw-count', state.deck.drawPile.length);
+    setText('#discard-count', state.deck.discardPile.length);
+    $('#end-day-button').disabled = game.busy;
   }
 
-  function formatEffects(card) {
-    const effects = eco.effectText(card.effects, 3);
-    return effects.map((effect) => `<span class="effect ${effect.value < 0 ? 'negative' : ''}">${effect.value > 0 ? '+' : ''}${effect.value} ${escapeHtml(effect.label)}</span>`).join('');
-  }
-  function renderCards(cards) {
-    $('#action-cards').innerHTML = cards.map((card, index) => {
-      const rule = data.strategyRules[card.id] || {};
-      const prerequisites = (rule.requirements || []).map((requirement) => requirement.label).join('、');
-      return `<button class="action-card action-${index}" data-card-id="${card.id}" aria-label="选择行动：${card.title}">
-      <span class="card-top"><span class="card-icon">${card.icon}</span><span class="card-arrow">→</span></span>
-      <span class="card-title">${escapeHtml(card.title)}</span>
-      <span class="card-description">${escapeHtml(card.description)}</span>
-      <span class="effects">${formatEffects(card)}</span>
-      ${prerequisites ? `<span class="card-prerequisite">前提：${escapeHtml(prerequisites)}</span>` : ''}
-      <span class="card-reason">${escapeHtml(card.reason)}</span>
-    </button>`;
-    }).join('');
-  }
-
-  function render(state, cards) {
-    renderStatus(state); renderIsland(state); renderBars(state); renderStrategy(state); renderInsight(state); renderCards(cards);
-  }
-
-  function showModal(title, content, extraClass) {
-    $('#modal-root').innerHTML = `<div class="modal-backdrop"><section class="modal ${extraClass || ''}" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}"><button class="modal-close" data-action="close-modal" aria-label="关闭">×</button><header class="modal-header"><p class="kicker">一座岛的100天</p><h2>${escapeHtml(title)}</h2></header>${content}</section></div>`;
-  }
-  function closeModal() { $('#modal-root').innerHTML = ''; }
-
-  function openGuide() {
-    showModal('如何让岛屿苏醒？', `<div class="guide-content"><div class="guide-step"><b>1</b><div><h3>每天一个选择</h3><p>从三张生态行动卡中选择一张。水、植物、栖息地和保护都很重要。</p></div></div><div class="guide-step"><b>2</b><div><h3>观察连锁反应</h3><p>花朵支持昆虫，昆虫支持鸟类；草地支持兔子，而狐狸会让兔子不过度繁殖。</p></div></div><div class="guide-step"><b>3</b><div><h3>别只堆一种生命</h3><p>物种、森林、湿地与洁净水都要有，生态稳定性才会提升。</p></div></div><div class="guide-step"><b>4</b><div><h3>抵御自然波动</h3><p>干旱、污染或游客潮会发生。提前让生态多样、连通，就更有韧性。</p></div></div><button class="button primary full" data-action="close-modal">我明白了</button></div>`);
-  }
-
-  function codexContent(state, selectedId) {
-    const current = state || eco.createInitialState();
-    const selected = data.species.find((item) => item.id === selectedId) || data.species[0];
-    const isKnown = current.species[selected.id] >= 6;
-    const cards = data.species.map((item) => {
-      const known = current.species[item.id] >= 6;
-      return `<button class="species-tile ${known ? '' : 'locked'} ${item.id === selected.id ? 'selected' : ''}" data-species-id="${item.id}"><span>${known ? item.icon : '？'}</span><b>${known ? item.name : '？？？'}</b><small>${known ? item.category : '等待发现'}</small></button>`;
-    }).join('');
-    return `<div class="codex-summary"><span>已发现 <b>${eco.getDiscovered(current).length}</b> / 15</span><p>点选物种，理解它在岛屿中的位置。</p></div><div class="codex-layout"><div class="species-grid">${cards}</div><article class="species-detail ${isKnown ? '' : 'unknown'}"><span class="detail-icon">${isKnown ? selected.icon : '？'}</span><div><p class="kicker">${isKnown ? selected.category : '尚未发现'}</p><h3>${isKnown ? selected.name : '？？？'}</h3><p>${isKnown ? selected.description : '恢复对应生态环境后，这位岛民可能出现。'}</p></div>${isKnown ? `<dl><div><dt>偏好栖息地</dt><dd>${selected.preferredHabitat}</dd></div><div><dt>需要</dt><dd>${selected.dependencies}</dd></div><div><dt>食物</dt><dd>${selected.food}</dd></div><div><dt>天敌 / 消费者</dt><dd>${selected.predators}</dd></div><div class="full-row"><dt>生态作用</dt><dd>${selected.role}</dd></div></dl>` : ''}</article></div>`;
-  }
-  function openCodex(state, selectedId) { showModal('生态图鉴', codexContent(state, selectedId), 'wide-modal'); }
-  function refreshCodex(state, selectedId) { openCodex(state, selectedId); }
-
-  function active(state, ids) { return ids.every((id) => state.species[id] >= 6); }
-  function openNetwork(state) {
-    const chains = [
-      { title: '花丛食物链', nodes: [['🌼', '野花'], ['🐝', '蜜蜂 / 蝴蝶'], ['🐦', '小型鸣禽'], ['🦊', '狐狸']], ids: ['wildflowers', 'bee', 'songbird', 'fox'] },
-      { title: '草地食物链', nodes: [['🌱', '草'], ['🐇', '兔子'], ['🦊', '狐狸']], ids: ['grass', 'rabbit', 'fox'] },
-      { title: '湿地食物链', nodes: [['🪷', '水生植物'], ['🪰', '蜻蜓'], ['🐸', '青蛙'], ['🦆', '水鸟']], ids: ['aquatic', 'dragonfly', 'frog', 'waterbird'] },
-      { title: '森林夜行链', nodes: [['🌳', '乔木'], ['🐦', '鸣禽'], ['🦉', '猫头鹰']], ids: ['trees', 'songbird', 'owl'] }
-    ];
-    const html = chains.map((chain) => `<article class="network-chain ${active(state, chain.ids) ? 'complete' : ''}"><div><h3>${chain.title}</h3><span>${active(state, chain.ids) ? '已形成' : '等待连结'}</span></div><div class="network-nodes">${chain.nodes.map((node, index) => `<span class="network-node ${state.species[chain.ids[index]] >= 6 ? 'known' : ''}"><i>${state.species[chain.ids[index]] >= 6 ? node[0] : '？'}</i><b>${state.species[chain.ids[index]] >= 6 ? node[1] : '未知'}</b></span>${index < chain.nodes.length - 1 ? '<em>→</em>' : ''}`).join('')}</div></article>`).join('');
-    showModal('生态网络', `<p class="network-intro">每条链都不是孤立的。栖息地越完整，越多箭头会亮起来。</p><div class="network-list">${html}</div><p class="network-tip">提示：捕食者不是坏消息。狐狸与猫头鹰能减轻食草动物对植被的压力。</p>`, 'network-modal');
-  }
-
-  function showEvent(event, conditional) {
-    showModal(event.title, `<article class="event-modal"><div class="event-symbol">${event.icon}</div><p class="event-why"><b>为什么发生？</b>${escapeHtml(event.why)}</p><p><b>发生了什么？</b>${escapeHtml(event.description)}</p><div class="event-effects">${eco.effectText(event.effects).map((effect) => `<span class="effect ${effect.value < 0 ? 'negative' : ''}">${effect.value > 0 ? '+' : ''}${effect.value} ${escapeHtml(effect.label)}</span>`).join('')}</div>${conditional ? `<p class="event-warning">${escapeHtml(conditional)}</p>` : ''}<button class="button primary full" data-action="close-modal">继续照看岛屿</button></article>`, 'event-dialog');
-  }
-
-  function showMilestone(result) {
-    const headline = result.success ? '阶段目标达成！' : '阶段目标尚未达成';
-    const description = result.success ? `你完成了「${result.name}」。${result.reward}，四项核心指标可以继续成长。` : `你完成了 ${result.passed} / ${result.checks.length} 项「${result.name}」目标。未完成的修复工程让岛屿付出了稳定性代价，后续的核心指标上限也会受限。`;
-    showModal(headline, `<article class="milestone-modal"><div class="milestone-symbol ${result.success ? 'success' : ''}">${result.success ? '✦' : '◌'}</div><h3>${escapeHtml(result.name)}</h3><p>${escapeHtml(description)}</p><div class="milestone-checks">${result.checks.map((check) => `<div class="${check.passed ? 'passed' : ''}"><span>${check.passed ? '✓' : '×'}</span><b>${escapeHtml(check.label)}</b><em>${check.value} / ${check.target}</em></div>`).join('')}</div><button class="button primary full" data-action="close-modal">继续照看岛屿</button></article>`, 'event-dialog');
-  }
-
-  const tutorialSteps = [
-    ['这是你的岛。', '现在它有些疲惫：水源脆弱、植被稀少。你会亲眼看见它随选择改变。', '🏝️'],
-    ['每天选择一种生态行动。', '行动卡会马上改变数值，也会在之后的日子里影响物种。', '🃏'],
-    ['生命彼此相连。', '花、昆虫、鸟类、食草动物与捕食者会组成不同的食物链。', '⛓️'],
-    ['追求平衡，而非单一数量。', '只养大兔群会伤害植被；完整的森林、湿地和食物链才是目标。', '✦']
-  ];
-  function showTutorial(index) {
-    const step = tutorialSteps[index];
-    showModal(`新手引导 ${index + 1} / 4`, `<article class="tutorial"><div class="tutorial-icon">${step[2]}</div><h3>${step[0]}</h3><p>${step[1]}</p><div class="tutorial-dots">${tutorialSteps.map((_, i) => `<i class="${i === index ? 'active' : ''}"></i>`).join('')}</div><div class="tutorial-actions"><button class="text-button" data-action="skip-tutorial">跳过</button><button class="button primary" data-tutorial-index="${index + 1}">${index === tutorialSteps.length - 1 ? '开始照看岛屿' : '下一步 →'}</button></div></article>`, 'tutorial-modal');
-  }
-
-  function ending(state) {
-    const metrics = eco.calculateMetrics(state, false);
-    const recovery = Math.round((state.stats.biodiversity * 0.34 + state.stats.stability * 0.26 + state.stats.habitat * 0.22 + state.stats.foodChain * 0.18));
-    let title = '生态荒漠'; let text = '岛屿仍很脆弱，但你已经看见水、土壤和生命之间的联系。下一次可从水源、植物和栖息地的连结开始。'; let tone = 'dawn';
-    if (recovery >= 80) { title = '生物多样性天堂'; text = '森林、湿地和草地互相支持。传粉者、鸟类、食草动物与捕食者形成了有韧性的生态网络，这座岛重新成为生命的家园。'; tone = 'paradise'; }
-    else if (recovery >= 60) { title = '繁荣生态岛'; text = '岛上已形成多种栖息地。生命不再只是零星出现，而是在彼此支持的食物链中稳定下来。'; tone = 'lush'; }
-    else if (recovery >= 40) { title = '生态复苏'; text = '绿色正在扩大，新的居民陆续抵达。继续让湿地、森林与草地均衡发展，这张生态网会更牢固。'; tone = 'growing'; }
-    else if (recovery >= 20) { title = '开始恢复'; text = '岛屿已经有了回春迹象。现在最需要的是把零散的恢复成果连成完整栖息地。'; tone = 'sprout'; }
-    return { recovery, title, text, tone, metrics };
-  }
-  function showResults(state) {
-    const result = ending(state);
-    showScreen('results-screen');
-    $('#results-screen').innerHTML = `<div class="result-shell"><section id="share-card" class="result-card ${result.tone}"><div class="result-top"><span>100 DAYS OF BIODIVERSITY</span><span>第 100 天</span></div><div class="result-island"><span>🌳</span><span>🌼</span><span>🦋</span><span>🐦</span><span>🦊</span><span>〰</span></div><p class="kicker">你的生态岛报告</p><h1>${result.title}</h1><p class="result-story">${result.text}</p><div class="recovery-score"><b>${result.recovery}</b><span>/ 100<br>生态恢复度</span></div><div class="result-metrics"><div><b>${Math.round(state.stats.biodiversity)}</b><span>生物多样性</span></div><div><b>${Math.round(state.stats.stability)}</b><span>生态稳定</span></div><div><b>${Math.round(state.stats.habitat)}</b><span>栖息地</span></div><div><b>${Math.round(state.stats.foodChain)}</b><span>食物链</span></div></div><div class="result-facts"><span>发现 <b>${result.metrics.discovered}</b> / 15 种生物</span><span>恢复 <b>${result.metrics.habitatCount}</b> 种栖息地</span><span>形成 <b>${result.metrics.chainCount}</b> 条主要食物链</span><span>达成 <b>${state.milestones.completed}</b> / 4 战略节点</span></div></section><div class="result-actions"><button class="button primary large" data-action="restart">再照看一座岛 <span>↻</span></button><button class="button ghost" data-action="share">分享我的生态岛</button><button class="text-button" data-action="open-network">回看生态网络</button></div><p id="share-note" class="share-note">结果卡已为截图分享而设计。</p></div>`;
+  function render(state, game) {
+    eco.derive(state);
+    renderStatus(state);
+    renderForecast(state);
+    renderIsland(state, game);
+    renderSidebar(state);
+    renderCards(state, game);
   }
 
   function toast(message) {
     const element = $('#toast');
-    element.textContent = message; element.classList.add('visible');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => element.classList.remove('visible'), 2800);
+    clearTimeout(toastTimer);
+    element.textContent = message;
+    element.classList.add('show');
+    toastTimer = setTimeout(() => element.classList.remove('show'), 2600);
   }
 
-  window.IslandUI = { showScreen, render, openGuide, openCodex, refreshCodex, openNetwork, showEvent, showMilestone, showTutorial, showResults, closeModal, toast, ending };
+  function openModal(content, className) {
+    const root = $('#modal-root');
+    root.innerHTML = `<div class="modal-backdrop"><section class="modal-card ${className || ''}">${content}</section></div>`;
+    root.classList.add('open');
+  }
+  function closeModal() { const root = $('#modal-root'); root.classList.remove('open'); root.innerHTML = ''; }
+
+  function infoModal(title, body, buttonText) {
+    return new Promise((resolve) => {
+      openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><h2>${title}</h2>${body}<button class="button primary modal-confirm" data-modal-confirm>${buttonText || '继续'}</button>`, 'info-modal');
+      const finish = () => { closeModal(); resolve(); };
+      $('[data-modal-confirm]').addEventListener('click', finish);
+      $('[data-modal-close]').addEventListener('click', finish);
+    });
+  }
+
+  function openGuide() {
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">新核心玩法</p><h2>不是把四个数字堆满</h2>
+      <div class="guide-grid">
+        <article><b>1 · 看预警</b><p>未来三次危机始终公开。每轮代表5天，你要决定是发展，还是提前防灾。</p></article>
+        <article><b>2 · 经营七块土地</b><p>工程需要时间，而且会占用有限地块。草地改成森林后，兔群也可能失去食物。</p></article>
+        <article><b>3 · 拼生态结构</b><p>“溪流旁的水草湿地”才会形成湿地复苏；单独增加某个数值没有 Combo。</p></article>
+        <article><b>4 · 管理牌库污染</b><p>危机失败会加入负面牌，挤占手牌并持续伤害生境。用治理牌移除它们。</p></article>
+      </div><div class="guide-callout">操作仍然是：把卡牌向上拖动释放。需要地块的牌会进入选址状态，再点击发光地块。</div>`, 'wide-modal');
+    $('[data-modal-close]').addEventListener('click', closeModal);
+  }
+
+  function openCodex(state) {
+    const species = state ? data.species : data.species.slice(0, 5);
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">生态图鉴</p><h2>岛屿居民</h2><div class="codex-grid">${species.map((item) => {
+      const population = state ? state.species[item.id] : 0;
+      const seen = !state || population >= 8;
+      return `<article class="codex-item ${seen ? '' : 'locked'}"><span>${seen ? item.icon : '？'}</span><div><b>${seen ? item.name : '尚未发现'}</b><small>${seen ? item.category : '需要合适的栖息结构'}</small><p>${seen ? item.role : '继续恢复岛屿以发现线索。'}</p></div></article>`;
+    }).join('')}</div>`, 'wide-modal');
+    $('[data-modal-close]').addEventListener('click', closeModal);
+  }
+
+  function openNetwork(state) {
+    if (!state) { openGuide(); return; }
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">结构性 Combo</p><h2>生态网络</h2><p class="modal-lead">网络来自真实地块关系。形成后会改写危机判定与物种定居。</p><div class="combo-library">${Object.entries(data.comboMeta).map(([id, combo]) => {
+      const active = state.activeNetworks.includes(id);
+      const discovered = state.discoveredNetworks.includes(id);
+      return `<article class="${active ? 'active' : discovered ? 'discovered' : ''}"><span>${combo.icon}</span><div><b>${combo.name}${active ? ' · 生效中' : discovered ? ' · 曾形成' : ''}</b><p>${combo.text}</p></div></article>`;
+    }).join('')}</div>`, 'wide-modal');
+    $('[data-modal-close]').addEventListener('click', closeModal);
+  }
+
+  function showTileDetails(state, tileId) {
+    const tile = eco.tileById(state, tileId);
+    const meta = data.terrainMeta[tile.terrain];
+    const neighborsText = eco.neighbors(state, tile.id).map((item) => data.terrainMeta[item.terrain].name).join('、');
+    const traits = tile.traits.length ? tile.traits.map((id) => `${data.traitMeta[id].icon}${data.traitMeta[id].name}`).join('、') : '暂无营造设施';
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><div class="tile-detail-title"><span>${meta.icon}</span><div><p class="kicker">地块 ${tile.id + 1}</p><h2>${meta.name}</h2></div></div><p>${meta.hint}</p><div class="tile-detail-grid"><span><small>成熟阶段</small><b>${tile.maturity}/3</b></span><span><small>污染</small><b>${tile.pollution}层</b></span><span><small>压力</small><b>${tile.stress}层</b></span></div><p><b>相邻：</b>${neighborsText}</p><p><b>结构：</b>${traits}</p>${tile.project ? `<div class="guide-callout">${tile.project.name}还有 ${tile.project.remaining} 回合完成。</div>` : ''}`, 'tile-modal');
+    $('[data-modal-close]').addEventListener('click', closeModal);
+  }
+
+  function chooseCards(title, subtitle, cards, mode) {
+    return new Promise((resolve) => {
+      openModal(`<p class="kicker">${mode === 'upgrade' ? '牌组升级' : '阶段奖励'}</p><h2>${escapeHtml(title)}</h2><p class="modal-lead">${escapeHtml(subtitle)}</p><div class="reward-grid">${cards.map((card) => `<button class="reward-card ${card.type === '负面' ? 'status-card' : ''}" data-choice="${card.id}"><span class="reward-icon">${card.icon}</span><small>${escapeHtml(card.rarity)} · ${escapeHtml(card.type)}</small><b>${escapeHtml(card.title)}${mode === 'upgrade' ? ' → +' : ''}</b><p>${escapeHtml(mode === 'upgrade' && card.upgrade && card.upgrade.text ? card.upgrade.text : card.text)}</p><em>${mode === 'upgrade' ? '升级此牌的所有副本' : `${card.cost} 能量`}</em></button>`).join('')}</div>${mode === 'reward' ? '<button class="button ghost reward-skip" data-skip>跳过，获得下回合 +1 能量</button>' : ''}`, 'wide-modal reward-modal');
+      document.querySelectorAll('[data-choice]').forEach((button) => button.addEventListener('click', () => { const choice = button.dataset.choice; closeModal(); resolve(choice); }));
+      const skip = $('[data-skip]');
+      if (skip) skip.addEventListener('click', () => { closeModal(); resolve(null); });
+    });
+  }
+
+  function showReward(cards) { return chooseCards('选择一张加入牌组', '不是所有好牌都该拿：更厚的牌组会降低抽到关键牌的概率。', cards, 'reward'); }
+  function showUpgrade(cards) { return chooseCards('强化一项长期方案', '升级会作用于牌组内该牌的全部副本。', cards, 'upgrade'); }
+
+  function showCrisis(crisis, result) {
+    const body = `<div class="crisis-result ${result.success ? 'success' : 'failure'}"><span>${crisis.icon}</span><b>${result.success ? '结构经受住了考验' : '岛屿付出了代价'}</b></div><p>${escapeHtml(result.text)}</p>${result.statusIds.length ? `<div class="status-warning">负面牌加入弃牌堆：${result.statusIds.map((id) => data.cards.find((card) => card.id === id).title).join(' × ')}</div>` : ''}<div class="guide-callout"><b>原预警：</b>${escapeHtml(crisis.intent)}<br><b>应对思路：</b>${escapeHtml(crisis.counter)}</div>`;
+    return infoModal(`${crisis.name} · ${result.success ? '成功化解' : '防御失败'}`, body, '查看下一轮');
+  }
+
+  function showMilestone(result) {
+    const body = `<p>${escapeHtml(result.description)}</p><div class="milestone-result-list">${result.checks.map((check) => `<span class="${check.ok ? 'done' : 'miss'}">${check.ok ? '✓' : '×'} ${escapeHtml(check.label)}</span>`).join('')}</div><div class="guide-callout">${result.success ? '目标达成：获得一次卡牌升级机会。' : '目标未完全达成：仍可继续，但最终韧性评价会受影响。'}</div>`;
+    return infoModal(`${result.name} · ${result.success ? '达成' : '未完成'}`, body, '继续经营');
+  }
+
+  function flashNetwork(ids) {
+    if (!ids || !ids.length) return;
+    const root = $('#combo-banner');
+    root.innerHTML = ids.map((id) => { const combo = data.comboMeta[id]; return `<span>${combo.icon}</span><div><small>新生态结构形成</small><b>${combo.name}</b><p>${combo.text}</p></div>`; }).join('');
+    root.classList.add('show');
+    setTimeout(() => root.classList.remove('show'), 3300);
+  }
+
+  function playCardAnimation(uid) {
+    return new Promise((resolve) => {
+      const card = document.querySelector(`[data-card-uid="${uid}"]`);
+      if (!card) { resolve(); return; }
+      const rect = card.getBoundingClientRect();
+      const clone = card.cloneNode(true);
+      clone.className = `${card.className} playing-clone`;
+      Object.assign(clone.style, { position: 'fixed', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, margin: '0', zIndex: 3000, pointerEvents: 'none' });
+      document.body.appendChild(clone);
+      card.style.opacity = '0';
+      requestAnimationFrame(() => clone.classList.add('release-flight'));
+      setTimeout(() => { clone.remove(); resolve(); }, 380);
+    });
+  }
+
+  function renderResults(state, onRestart) {
+    const score = eco.finalScore(state);
+    const grade = score >= 82 ? '共生之岛' : score >= 66 ? '韧性群岛' : score >= 48 ? '恢复中的岛' : '脆弱的新生';
+    const discovered = eco.getDiscovered(state);
+    const successRate = state.crisesHandled ? Math.round(state.crisesSucceeded / state.crisesHandled * 100) : 0;
+    const root = $('#results-screen');
+    root.innerHTML = `<div class="results-wrap"><p class="eyebrow">100 DAYS LATER</p><h1>${grade}</h1><p class="results-lead">这次评价来自你建立的生态结构、危机应对与牌库健康度，而不是四个数字是否全满。</p><div class="score-ring"><strong>${score}</strong><small>综合韧性</small></div><div class="result-stats"><span><b>${state.activeNetworks.length}</b><small>生效结构</small></span><span><b>${discovered.length}</b><small>定居物种</small></span><span><b>${successRate}%</b><small>危机化解率</small></span><span><b>${eco.statusCount(state)}</b><small>残留负面牌</small></span></div><div class="result-networks">${state.discoveredNetworks.length ? state.discoveredNetworks.map((id) => `<span>${data.comboMeta[id].icon} ${data.comboMeta[id].name}</span>`).join('') : '<span>本次没有形成完整结构，下一局尝试让地块相互连接。</span>'}</div><button class="button primary large" id="result-restart">重新规划一座岛 <span>↻</span></button></div>`;
+    showScreen('results-screen');
+    $('#result-restart').addEventListener('click', onRestart);
+  }
+
+  window.IslandUI = {
+    showScreen, render, toast, closeModal, openGuide, openCodex, openNetwork, showTileDetails,
+    showReward, showUpgrade, showCrisis, showMilestone, flashNetwork, playCardAnimation, renderResults
+  };
 })();

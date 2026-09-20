@@ -1,234 +1,365 @@
-/* Small, explainable ecological simulation. It deliberately rewards connected habitats over one large population. */
+/* Rules for the 20-round, tile-based ecological simulation. */
 (function () {
   const data = window.IslandData;
   const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
-  const round = (value) => Math.round(value * 10) / 10;
+  const adjacency = {
+    0: [1, 2, 3, 4, 5, 6],
+    1: [0, 2, 6], 2: [0, 1, 3], 3: [0, 2, 4],
+    4: [0, 3, 5], 5: [0, 4, 6], 6: [0, 5, 1]
+  };
 
   function createInitialState() {
     const species = {};
-    data.species.forEach((item) => { species[item.id] = item.population; });
-    return {
+    data.species.forEach((item) => { species[item.id] = 0; });
+    const state = {
+      turn: 1,
       day: 1,
-      turns: 0,
-      stats: { biodiversity: 9, stability: 28, vegetation: 17, water: 25, forest: 12, wetland: 8, insects: 7, herbivores: 4, predators: 0, pollution: 38, habitat: 16, foodChain: 3 },
+      totalTurns: 20,
+      tiles: [
+        { id: 0, terrain: 'barren', maturity: 0, pollution: 1, stress: 0, traits: [], project: null },
+        { id: 1, terrain: 'stream', maturity: 1, pollution: 2, stress: 1, traits: [], project: null },
+        { id: 2, terrain: 'meadow', maturity: 1, pollution: 0, stress: 0, traits: [], project: null },
+        { id: 3, terrain: 'shrub', maturity: 1, pollution: 0, stress: 0, traits: [], project: null },
+        { id: 4, terrain: 'forest', maturity: 1, pollution: 0, stress: 1, traits: [], project: null },
+        { id: 5, terrain: 'barren', maturity: 0, pollution: 2, stress: 0, traits: [], project: null },
+        { id: 6, terrain: 'coast', maturity: 1, pollution: 3, stress: 0, traits: [], project: null }
+      ],
       species,
-      lastLog: { type: 'welcome', icon: '◒', title: '岛屿等待苏醒', text: '从水、植物或栖息地开始。每个微小决定都会传到食物链的下一环。' },
-      lastEventDay: -10,
-      recentCardIds: [],
+      introduced: {},
+      policies: {},
+      stats: {},
+      activeNetworks: [],
+      discoveredNetworks: [],
+      completedProjects: 0,
+      crisesHandled: 0,
+      crisesSucceeded: 0,
+      crisisHistory: [],
+      forecasts: [],
+      milestones: { records: [] },
       history: [],
-      flags: { corridor: 0, protected: 0 },
-      milestones: { completed: 0, debt: 0, records: [] },
-      lastCategory: null,
-      categoryStreak: 0,
-      lastActionFeedback: null
+      lastLog: { icon: '◒', title: '退化岛屿等待规划', text: '土地只有七块。观察危机预警，再决定每块地的长期用途。' }
     };
+    derive(state);
+    return state;
   }
 
-  function applyEffects(state, effects, multiplier) {
-    if (!effects) return;
-    const factor = multiplier === undefined ? 1 : multiplier;
-    const stats = effects.stats || {};
-    const species = effects.species || {};
-    Object.keys(stats).forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(state.stats, key)) state.stats[key] = clamp(state.stats[key] + stats[key] * factor);
-    });
-    Object.keys(species).forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(state.species, key)) state.species[key] = clamp(state.species[key] + species[key] * factor);
-    });
+  function tileById(state, id) { return state.tiles.find((tile) => tile.id === Number(id)); }
+  function neighbors(state, id) { return (adjacency[id] || []).map((nextId) => tileById(state, nextId)).filter(Boolean); }
+  function terrainCount(state, terrain) { return state.tiles.filter((tile) => tile.terrain === terrain && !tile.project).length; }
+  function hasTrait(state, trait) { return state.tiles.some((tile) => tile.traits.includes(trait)); }
+  function hasAdjacentTerrain(state, tile, terrains) { return neighbors(state, tile.id).some((other) => terrains.includes(other.terrain)); }
+  function totalPollution(state) { return state.tiles.reduce((sum, tile) => sum + tile.pollution, 0); }
+  function statusCount(state) {
+    if (!state.deck) return 0;
+    return ['drawPile', 'discardPile', 'hand'].reduce((sum, key) => sum + state.deck[key].filter((item) => {
+      const card = data.cards.find((candidate) => candidate.id === item.cardId);
+      return card && card.type === '负面';
+    }).length, 0);
   }
 
-  function applyCard(state, card) {
-    const rule = data.strategyRules[card.id] || { category: 'general' };
-    const unmet = (rule.requirements || []).filter((requirement) => {
-      const source = requirement.species ? state.species : state.stats;
-      return source[requirement.key] < requirement.min;
-    });
-    if (state.lastCategory === rule.category) state.categoryStreak += 1;
-    else state.categoryStreak = 1;
-    state.lastCategory = rule.category;
-    let effectiveness = unmet.length ? 0.35 : 1;
-    const fatigue = state.categoryStreak >= 3;
-    if (fatigue) effectiveness *= 0.55;
-    applyEffects(state, card.effects, effectiveness);
-    let conditionalNote = '';
-    if (card.conditional && state.stats[card.conditional.stat] < card.conditional.below) {
-      applyEffects(state, card.conditional.effects, effectiveness);
-      conditionalNote = card.conditional.note;
+  function getCard(cardId, state) {
+    const base = data.cards.find((card) => card.id === cardId);
+    if (!base) return null;
+    if (!state || !state.upgrades || !state.upgrades[cardId] || !base.upgrade) return { ...base };
+    return { ...base, ...base.upgrade, upgraded: true, title: `${base.title}+` };
+  }
+
+  function validTargets(state, card) {
+    if (!card || !card.target) return [];
+    return state.tiles.filter((tile) => {
+      if (tile.project) return false;
+      if (card.target.terrains && !card.target.terrains.includes(tile.terrain)) return false;
+      if (card.target.pollutedOnly && tile.pollution <= 0) return false;
+      if (card.target.adjacent && !hasAdjacentTerrain(state, tile, card.target.adjacent)) return false;
+      if (card.target.minMaturity && tile.maturity < card.target.minMaturity) return false;
+      if (card.target.requiresTrait && !tile.traits.includes(card.target.requiresTrait)) return false;
+      if (card.action === 'trait' && tile.traits.includes(card.trait)) return false;
+      if (card.action === 'introduce' && state.introduced[card.species]) return false;
+      return true;
+    }).map((tile) => tile.id);
+  }
+
+  function completeProject(state, tile) {
+    const project = tile.project;
+    tile.terrain = project.terrain;
+    tile.maturity = 1;
+    tile.stress = Math.max(0, tile.stress - 1);
+    tile.project = null;
+    state.completedProjects += 1;
+    return `${data.terrainMeta[tile.terrain].name}工程完工`;
+  }
+
+  function playCard(state, card, targetId) {
+    const tile = targetId === undefined || targetId === null ? null : tileById(state, targetId);
+    let title = card.title;
+    let text = card.text;
+    if (card.action === 'project' && tile) {
+      tile.project = { cardId: card.id, name: card.title, terrain: card.terrain, remaining: card.duration, duration: card.duration };
+      if (card.duration <= 0) text = completeProject(state, tile);
+      else text = `在${data.terrainMeta[tile.terrain].name}启动工程，${card.duration}回合后完成。`;
+    } else if (card.action === 'trait' && tile) {
+      if (card.trait === 'long_bloom') tile.traits = tile.traits.filter((trait) => trait !== 'flowers');
+      tile.traits.push(card.trait);
+      text = `${data.terrainMeta[tile.terrain].name}获得「${data.traitMeta[card.trait].name}」。`;
+    } else if (card.action === 'clean' && tile) {
+      const before = tile.pollution;
+      tile.pollution = Math.max(0, tile.pollution - card.power);
+      tile.stress = Math.max(0, tile.stress - 1);
+      text = `清除了${before - tile.pollution}层污染。`;
+    } else if (card.action === 'cleanse_tile' && tile) {
+      tile.stress = 0;
+      tile.pollution = Math.max(0, tile.pollution - 1);
+      text = '地块压力已清除，入侵藤蔓不再蔓延。';
+    } else if (card.action === 'policy') {
+      const existed = state.policies[card.policy];
+      state.policies[card.policy] = true;
+      text = existed ? '政策已经生效，这次行动用于巩固执行。' : `${card.title}成为本局持续政策。`;
+    } else if (card.action === 'introduce' && tile) {
+      state.introduced[card.species] = tile.id;
+      text = `${data.species.find((item) => item.id === card.species).name}在这里获得了第一处家园。`;
+    } else if (card.action === 'rewild') {
+      let budget = Math.max(1, 4 - state.tiles.filter((item) => item.stress > 0).length);
+      state.tiles.filter((item) => !item.project && !['barren', 'coast', 'stream'].includes(item.terrain) && item.stress === 0 && item.maturity < 3).forEach((item) => {
+        if (budget > 0) { item.maturity += 1; budget -= 1; }
+      });
+      text = '未受压的生境向成熟阶段自然演替。';
     }
-    if (card.id === 'corridor') state.flags.corridor += 1;
-    if (['anti-poaching', 'fox-reserve', 'visitor-limit', 'ancient-tree'].includes(card.id)) state.flags.protected += 1;
-    state.lastActionFeedback = { unmet: unmet.map((requirement) => requirement.label), fatigue, effectiveness };
-    const strategicNote = unmet.length ? `条件尚未满足（${unmet.map((requirement) => requirement.label).join('、')}），项目仅发挥 ${Math.round(effectiveness * 100)}% 效果。` : fatigue ? '连续把资源投入同一生态系统，边际收益明显下降。' : '';
-    return [conditionalNote, strategicNote].filter(Boolean).join(' ');
+    derive(state);
+    state.lastLog = { icon: card.icon, title, text };
+    state.history.push({ turn: state.turn, type: 'card', title, text });
+    return { title, text, target: tile };
   }
 
-  function supportScores(state) {
-    const s = state.stats;
-    const p = state.species;
-    return {
-      wildflowers: s.vegetation * 0.76 + s.water * 0.10 - s.pollution * 0.20,
-      grass: s.vegetation * 0.96 - s.pollution * 0.10,
-      shrubs: s.vegetation * 0.66 + s.forest * 0.28,
-      trees: s.forest,
-      aquatic: s.wetland * 0.62 + s.water * 0.32 - s.pollution * 0.38,
-      bee: p.wildflowers * 0.70 + s.vegetation * 0.18 - s.pollution * 0.18,
-      butterfly: p.wildflowers * 0.64 + p.shrubs * 0.18,
-      dragonfly: s.wetland * 0.62 + s.water * 0.30 - s.pollution * 0.20,
-      frog: s.wetland * 0.45 + p.dragonfly * 0.28 + s.water * 0.22 - s.pollution * 0.15,
-      waterbird: s.wetland * 0.36 + p.frog * 0.28 + p.aquatic * 0.20,
-      songbird: s.forest * 0.42 + p.shrubs * 0.25 + (p.bee + p.butterfly) * 0.15,
-      rabbit: p.grass * 0.42 + p.shrubs * 0.30 - p.fox * 0.22 - p.owl * 0.12,
-      deer: s.forest * 0.42 + p.grass * 0.28 - p.fox * 0.15,
-      fox: p.rabbit * 0.35 + p.deer * 0.28 + p.songbird * 0.10 + p.frog * 0.06,
-      owl: s.forest * 0.54 + p.songbird * 0.28 + p.rabbit * 0.09
-    };
+  function evaluateNetworks(state) {
+    const found = [];
+    const wetlandRevival = state.tiles.some((tile) => tile.terrain === 'wetland' && tile.traits.includes('aquatic') && hasAdjacentTerrain(state, tile, ['stream']));
+    if (wetlandRevival) found.push('wetland_revival');
+    const pollinatorWeb = state.tiles.some((tile) => tile.terrain === 'meadow' && (tile.traits.includes('flowers') || tile.traits.includes('long_bloom')) && (tile.traits.includes('insect_hotel') || neighbors(state, tile.id).some((other) => other.terrain === 'shrub' || other.traits.includes('insect_hotel'))));
+    if (pollinatorWeb) found.push('pollinator_web');
+    const predatorBalance = state.species.rabbit > 0 && state.species.fox > 0 && hasTrait(state, 'corridor');
+    if (predatorBalance) found.push('predator_balance');
+    const forestRefuge = state.tiles.some((tile) => tile.terrain === 'forest' && tile.maturity >= 2 && tile.traits.includes('old_tree')) && state.policies.dark_sky;
+    if (forestRefuge) found.push('forest_refuge');
+    const coastalRoute = state.tiles.some((tile) => tile.terrain === 'coast' && tile.pollution <= 1) && terrainCount(state, 'wetland') > 0 && state.policies.migration_refuge;
+    if (coastalRoute) found.push('coastal_route');
+    return found;
   }
 
-  function evolveSpecies(state) {
-    const p = state.species;
-    const supports = supportScores(state);
-    const colonization = {
-      wildflowers: { day: 1, support: 8 }, grass: { day: 1, support: 9 }, shrubs: { day: 1, support: 12 }, trees: { day: 1, support: 12 }, aquatic: { day: 1, support: 15 },
-      bee: { day: 1, support: 12 }, butterfly: { day: 8, support: 18 }, dragonfly: { day: 10, support: 19 }, frog: { day: 18, support: 22 },
-      waterbird: { day: 25, support: 24 }, songbird: { day: 12, support: 18 }, rabbit: { day: 20, support: 25 }, deer: { day: 35, support: 30 },
-      fox: { day: 42, support: 27 }, owl: { day: 46, support: 30 }
+  function derive(state) {
+    const count = (terrain) => terrainCount(state, terrain);
+    const maturity = (terrain) => state.tiles.filter((tile) => tile.terrain === terrain).reduce((sum, tile) => sum + tile.maturity, 0);
+    const pollution = totalPollution(state);
+    const stress = state.tiles.reduce((sum, tile) => sum + tile.stress, 0);
+    const water = clamp(18 + maturity('stream') * 13 + maturity('wetland') * 9 + maturity('forest') * 3 + (hasTrait(state, 'water_storage') ? 10 : 0) - pollution * 3 - stress * 2);
+    const vegetation = clamp(8 + maturity('meadow') * 10 + maturity('shrub') * 11 + maturity('forest') * 13 + (hasTrait(state, 'flowers') ? 5 : 0) + (hasTrait(state, 'long_bloom') ? 9 : 0) - stress * 4);
+
+    state.species.grass = count('meadow') ? clamp(10 + maturity('meadow') * 18 - stress * 2) : 0;
+    state.species.shrubs = count('shrub') ? clamp(8 + maturity('shrub') * 19) : 0;
+    state.species.trees = count('forest') ? clamp(8 + maturity('forest') * 18) : 0;
+    state.species.wildflowers = hasTrait(state, 'flowers') || hasTrait(state, 'long_bloom') ? clamp(18 + maturity('meadow') * 10) : 0;
+    state.species.aquatic = hasTrait(state, 'aquatic') ? clamp(16 + maturity('wetland') * 15 - pollution * 2) : 0;
+    state.species.bee = (state.species.wildflowers > 0 && pollution < 9) ? clamp(12 + (hasTrait(state, 'insect_hotel') ? 24 : 0) + (hasTrait(state, 'long_bloom') ? 18 : 0)) : 0;
+    state.species.butterfly = (state.species.wildflowers > 0 && count('shrub')) ? clamp(10 + maturity('shrub') * 8) : 0;
+    state.species.dragonfly = (hasTrait(state, 'aquatic') && water > 30) ? clamp(12 + maturity('wetland') * 12) : 0;
+    state.species.frog = (hasTrait(state, 'frog_pond') && state.species.dragonfly > 0) || state.activeNetworks.includes('wetland_revival') ? clamp(15 + maturity('wetland') * 12) : 0;
+    state.species.songbird = (count('shrub') && count('forest')) || hasTrait(state, 'nest_boxes') ? clamp(10 + maturity('forest') * 7 + (hasTrait(state, 'nest_boxes') ? 16 : 0)) : 0;
+    state.species.rabbit = state.introduced.rabbit !== undefined ? clamp(24 + maturity('meadow') * 7 - (state.activeNetworks.includes('predator_balance') ? 8 : 0)) : ((state.turn >= 6 && count('meadow') && count('shrub')) ? 9 : 0);
+    state.species.deer = (state.turn >= 11 && count('meadow') && count('forest') && hasTrait(state, 'corridor')) ? 12 : 0;
+    state.species.fox = state.introduced.fox !== undefined ? 24 : 0;
+    state.species.owl = state.activeNetworks.includes('forest_refuge') ? 18 : 0;
+    state.species.waterbird = state.activeNetworks.includes('coastal_route') || (state.policies.migration_refuge && count('wetland')) ? 18 : 0;
+
+    state.activeNetworks = evaluateNetworks(state);
+    /* A second pass lets species that depend on a newly formed structure arrive immediately. */
+    if (state.activeNetworks.includes('wetland_revival')) state.species.frog = Math.max(state.species.frog, 22);
+    if (state.activeNetworks.includes('forest_refuge')) state.species.owl = 18;
+    if (state.activeNetworks.includes('coastal_route')) state.species.waterbird = 22;
+    if (state.activeNetworks.includes('predator_balance')) state.species.rabbit = Math.min(state.species.rabbit, 38);
+    state.activeNetworks.forEach((id) => {
+      if (!state.discoveredNetworks.includes(id)) state.discoveredNetworks.push(id);
+    });
+
+    const present = Object.values(state.species).filter((population) => population >= 8).length;
+    const matureHabitats = state.tiles.filter((tile) => !['barren', 'coast'].includes(tile.terrain) && tile.maturity >= 2).length;
+    const trophic = (Object.values(state.species).some((value, index) => index >= 5 && index <= 10 && value > 0) ? 1 : 0)
+      + (state.species.rabbit > 0 || state.species.deer > 0 ? 1 : 0)
+      + (state.species.fox > 0 || state.species.owl > 0 ? 1 : 0);
+    state.stats = {
+      water: Math.round(water), vegetation: Math.round(vegetation), pollution,
+      biodiversity: clamp(Math.round(present * 5 + state.activeNetworks.length * 7 + matureHabitats * 2)),
+      habitat: clamp(Math.round(12 + state.tiles.filter((tile) => tile.terrain !== 'barren').length * 8 + matureHabitats * 6 - stress * 4 - pollution * 2)),
+      foodChain: clamp(Math.round(8 + trophic * 18 + state.activeNetworks.length * 9)),
+      stability: clamp(Math.round(22 + state.activeNetworks.length * 13 + matureHabitats * 5 + state.crisesSucceeded * 2 - stress * 5 - statusCount(state) * 3))
     };
-    Object.keys(p).forEach((id) => {
-      const rule = colonization[id];
-      const target = clamp(supports[id] || 0);
-      if (p[id] < 1 && state.day >= rule.day && target >= rule.support) {
-        p[id] = Math.min(5, target * 0.16);
-      } else if (p[id] > 0) {
-        const speed = ['fox', 'owl', 'deer', 'waterbird'].includes(id) ? 0.075 : 0.11;
-        p[id] = clamp(p[id] + (target - p[id]) * speed);
+    return state.stats;
+  }
+
+  function applyHeldStatus(state, statusId, logs) {
+    const candidates = (terrains) => state.tiles.filter((tile) => terrains.includes(tile.terrain));
+    const choose = (items) => items.length ? items[Math.floor(Math.random() * items.length)] : null;
+    if (statusId === 'dry_soil') {
+      const tile = choose(candidates(['forest', 'meadow', 'shrub']));
+      if (tile) { tile.stress = clamp(tile.stress + 1, 0, 3); logs.push('干裂土壤让一处陆地生境承压'); }
+    } else if (statusId === 'toxic_sediment') {
+      const tile = choose(candidates(['stream', 'wetland']));
+      if (tile) { tile.pollution = clamp(tile.pollution + 1, 0, 6); logs.push('有毒沉积继续污染水域'); }
+    } else if (statusId === 'overgrazing') {
+      const tile = choose(candidates(['meadow', 'shrub']));
+      if (tile) { tile.stress = clamp(tile.stress + 1, 0, 3); tile.maturity = Math.max(1, tile.maturity - 1); logs.push('过度啃食削弱了一处植被'); }
+    } else if (statusId === 'invasive_vine') {
+      const tile = choose(candidates(['meadow', 'shrub', 'forest', 'wetland']));
+      if (tile) { tile.stress = clamp(tile.stress + 1, 0, 3); logs.push('入侵藤蔓继续挤压本地生境'); }
+    }
+  }
+
+  function processRound(state, heldStatusIds) {
+    const logs = [];
+    (heldStatusIds || []).forEach((id) => applyHeldStatus(state, id, logs));
+    const dryPenalty = (heldStatusIds || []).includes('dry_soil');
+    state.tiles.forEach((tile) => {
+      if (!tile.project) return;
+      const waterSensitive = ['forest', 'wetland'].includes(tile.project.terrain);
+      const protectedWater = state.policies.water_watch || hasTrait(state, 'water_storage') || hasAdjacentTerrain(state, tile, ['stream', 'wetland']);
+      if (waterSensitive && dryPenalty && !protectedWater) {
+        logs.push(`${tile.project.name}因缺水停滞`);
+        return;
       }
+      tile.project.remaining -= 1;
+      if (tile.project.remaining <= 0) logs.push(completeProject(state, tile));
     });
-  }
 
-  function calculateMetrics(state, smooth) {
-    const s = state.stats;
-    const p = state.species;
-    const discovered = Object.values(p).filter((value) => value >= 6).length;
-    const habitatCount = [s.vegetation, s.forest, s.wetland].filter((value) => value >= 28).length;
-    const flowerLink = p.wildflowers > 14 && (p.bee + p.butterfly) / 2 > 9 && p.songbird > 7 ? 22 : 0;
-    const meadowLink = p.grass > 18 && p.rabbit > 8 && p.fox > 6 ? 25 : 0;
-    const wetlandLink = p.aquatic > 9 && p.dragonfly > 8 && p.frog > 7 && p.waterbird > 5 ? 25 : 0;
-    const forestLink = p.trees > 14 && p.songbird > 8 && (p.owl > 5 || p.fox > 6) ? 20 : 0;
-    const chainTarget = clamp(flowerLink + meadowLink + wetlandLink + forestLink + habitatCount * 3);
-    const habitatTarget = clamp(s.vegetation * 0.36 + s.forest * 0.33 + s.wetland * 0.25 + state.flags.corridor * 5);
-    const highHerbivoreStress = p.rabbit > 62 && s.vegetation < 52 ? 13 : 0;
-    const missingPredatorStress = (p.rabbit + p.deer) > 58 && (p.fox + p.owl) < 10 ? 9 : 0;
-    const waterStress = s.water < 20 ? 12 : 0;
-    const pollutionStress = s.pollution > 60 ? 14 : 0;
-    const habitatSpread = Math.max(s.vegetation, s.forest, s.wetland) - Math.min(s.vegetation, s.forest, s.wetland);
-    const balance = clamp(100 - habitatSpread * 1.05 - highHerbivoreStress * 1.2);
-    const stabilityTarget = clamp((s.vegetation + s.water + s.forest + s.wetland) * 0.13 + chainTarget * 0.31 + habitatTarget * 0.18 + balance * 0.17 - s.pollution * 0.34 - highHerbivoreStress - missingPredatorStress - waterStress - pollutionStress + state.flags.protected * 1.5);
-    const biodiversityTarget = clamp(discovered / data.species.length * 47 + habitatCount * 7 + chainTarget * 0.22 + stabilityTarget * 0.14 + balance * 0.08 - s.pollution * 0.10);
-    const caps = getMetricCaps(state);
-    if (smooth) {
-      s.foodChain = clamp(s.foodChain + (chainTarget - s.foodChain) * 0.24, 0, caps.foodChain);
-      s.habitat = clamp(s.habitat + (habitatTarget - s.habitat) * 0.11, 0, caps.habitat);
-      s.stability = clamp(s.stability + (stabilityTarget - s.stability) * 0.13, 0, caps.stability);
-      s.biodiversity = clamp(s.biodiversity + (biodiversityTarget - s.biodiversity) * 0.18, 0, caps.biodiversity);
+    if (state.turn % 2 === 0) {
+      state.tiles.filter((tile) => !tile.project && !['barren', 'coast'].includes(tile.terrain) && tile.stress === 0 && tile.pollution <= 1 && tile.maturity < 3).forEach((tile) => { tile.maturity += 1; });
     }
-    return { discovered, habitatCount, chainCount: [flowerLink, meadowLink, wetlandLink, forestLink].filter(Boolean).length, balance, chainTarget, habitatTarget, stabilityTarget, biodiversityTarget, caps };
-  }
-
-  function getMetricCaps(state) {
-    const completed = state.milestones ? state.milestones.completed : 0;
-    return {
-      biodiversity: 50 + completed * 12.5,
-      stability: 54 + completed * 11.5,
-      habitat: 56 + completed * 11,
-      foodChain: 56 + completed * 11
-    };
-  }
-
-  function applyMetricCaps(state) {
-    const caps = getMetricCaps(state);
-    ['biodiversity', 'stability', 'habitat', 'foodChain'].forEach((key) => { state.stats[key] = clamp(state.stats[key], 0, caps[key]); });
-  }
-
-  function simulate(state) {
-    const s = state.stats;
-    const p = state.species;
-    const waterTarget = clamp(18 + s.wetland * 0.64 + s.forest * 0.13 - s.pollution * 0.28);
-    const vegetationTarget = clamp(4 + s.water * 0.44 + s.forest * 0.23 + s.wetland * 0.20 - s.pollution * 0.35);
-    s.water += (waterTarget - s.water) * 0.045;
-    s.vegetation += (vegetationTarget - s.vegetation) * 0.030 - (p.rabbit + p.deer * 1.15) * 0.007;
-    s.forest += (p.trees - s.forest) * 0.006 - Math.max(0, s.pollution - 45) * 0.004;
-    s.wetland += (p.aquatic - s.wetland) * 0.004 - Math.max(0, s.pollution - 48) * 0.004;
-    s.pollution += 0.12 - s.wetland * 0.002 - state.flags.protected * 0.010;
-    Object.keys(s).forEach((key) => { s[key] = clamp(s[key]); });
-    evolveSpecies(state);
-    s.insects = clamp((p.bee + p.butterfly + p.dragonfly) / 3);
-    s.herbivores = clamp((p.rabbit + p.deer) / 2);
-    s.predators = clamp((p.fox + p.owl) / 2);
-    const metrics = calculateMetrics(state, true);
-    applyMetricCaps(state);
-    Object.keys(s).forEach((key) => { s[key] = round(clamp(s[key])); });
-    Object.keys(p).forEach((key) => { p[key] = round(clamp(p[key])); });
-    return metrics;
-  }
-
-  function applyEvent(state, event) {
-    applyEffects(state, event.effects);
-    let conditional = '';
-    if (event.conditional && state.stats[event.conditional.stat] < event.conditional.below) {
-      applyEffects(state, event.conditional.effects);
-      conditional = '湿地不足使这次事件的影响加重了。';
+    if (state.turn % 4 === 0 && state.policies.seed_bank) {
+      const barren = state.tiles.find((tile) => tile.terrain === 'barren' && tile.pollution > 0);
+      if (barren) { barren.pollution -= 1; logs.push('种子库志愿者净化了一块退化地'); }
     }
-    Object.keys(state.stats).forEach((key) => { state.stats[key] = round(clamp(state.stats[key])); });
-    Object.keys(state.species).forEach((key) => { state.species[key] = round(clamp(state.species[key])); });
-    applyMetricCaps(state);
-    return conditional;
+    state.tiles.forEach((tile) => {
+      if (tile.stress > 0 && Math.random() < 0.25) tile.stress -= 1;
+    });
+    derive(state);
+
+    if (state.species.rabbit >= 30 && !state.activeNetworks.includes('predator_balance')) {
+      const meadow = state.tiles.find((tile) => tile.terrain === 'meadow' && tile.stress < 3);
+      if (meadow) { meadow.stress += 1; logs.push('缺少捕食者，兔群开始挤压草地'); }
+    }
+    derive(state);
+    return { logs };
   }
 
-  function evaluateMilestone(state) {
-    const milestone = data.milestones.find((item) => item.day === state.day);
-    if (!milestone || state.milestones.records.some((record) => record.day === milestone.day)) return null;
-    const checks = milestone.checks.map((check) => ({ label: check.label, passed: check.test(state), value: Math.round(check.value(state)), target: check.target, lowerIsBetter: check.lowerIsBetter }));
-    const passed = checks.filter((check) => check.passed).length;
-    const success = passed === checks.length;
-    const result = { day: milestone.day, name: milestone.name, description: milestone.description, reward: milestone.reward, checks, passed, success };
-    state.milestones.records.push(result);
-    if (success) {
-      state.milestones.completed += 1;
-      state.stats.stability += 5;
-      state.stats.biodiversity += 4;
+  function damageTile(tile, amount) {
+    if (!tile) return;
+    tile.stress = clamp(tile.stress + amount, 0, 3);
+    if (amount >= 2 && tile.maturity > 1) tile.maturity -= 1;
+  }
+
+  function resolveCrisis(state, crisis) {
+    const wetlands = state.tiles.filter((tile) => tile.terrain === 'wetland');
+    const streams = state.tiles.filter((tile) => tile.terrain === 'stream');
+    const forests = state.tiles.filter((tile) => tile.terrain === 'forest');
+    const meadows = state.tiles.filter((tile) => tile.terrain === 'meadow');
+    const shrubs = state.tiles.filter((tile) => tile.terrain === 'shrub');
+    let success = false;
+    let result = '';
+    if (crisis.id === 'drought') {
+      success = wetlands.length > 0 || hasTrait(state, 'water_storage') || state.policies.water_watch;
+      if (!success) [...forests, ...meadows].slice(0, 2).forEach((tile) => damageTile(tile, 1));
+      result = success ? '蓄水结构让关键生境熬过了缺水期。' : '两处生境干裂，恢复工程也更容易停滞。';
+    } else if (crisis.id === 'flood') {
+      success = wetlands.some((tile) => hasAdjacentTerrain(state, tile, ['stream'])) || forests.some((tile) => tile.maturity >= 2);
+      if (!success) streams.forEach((stream) => neighbors(state, stream.id).slice(0, 2).forEach((tile) => damageTile(tile, 1)));
+      result = success ? '湿地和林地消化了暴雨洪峰。' : '径流冲击溪流邻地，土壤结构受损。';
+    } else if (crisis.id === 'rabbit_boom') {
+      success = state.activeNetworks.includes('predator_balance');
+      if (!success) [...meadows, ...shrubs].slice(0, 2).forEach((tile) => damageTile(tile, 1));
+      result = success ? '狐狸把兔群维持在生境可承受的范围。' : '没有捕食平衡，兔群啃食了草地与灌丛。';
+    } else if (crisis.id === 'spill') {
+      success = state.activeNetworks.includes('wetland_revival') || (streams.length && streams.every((tile) => tile.pollution === 0));
+      streams.forEach((tile) => { tile.pollution = clamp(tile.pollution + (success ? 1 : 3), 0, 6); });
+      if (!success) wetlands.forEach((tile) => { tile.pollution = clamp(tile.pollution + 2, 0, 6); });
+      result = success ? '水草湿地拦下大部分污染，但溪流仍需关注。' : '污染进入溪流并向湿地扩散。';
+    } else if (crisis.id === 'visitors') {
+      const coast = state.tiles.find((tile) => tile.terrain === 'coast');
+      success = state.policies.visitor_limits || state.policies.ranger_patrol;
+      if (coast) coast.pollution = clamp(coast.pollution + (success ? 0 : 2), 0, 6);
+      result = success ? '限流与巡护把人流引导到低影响路线。' : '游客惊扰鸟类，并在海岸留下垃圾。';
+    } else if (crisis.id === 'wildfire') {
+      success = state.policies.firebreak || wetlands.length > 0 || hasTrait(state, 'water_storage');
+      if (!success) forests.slice(0, 2).forEach((tile) => damageTile(tile, 2));
+      result = success ? '防火与蓄水结构阻断了火势。' : '干燥林缘受损，森林成熟度下降。';
+    } else if (crisis.id === 'invasion') {
+      success = state.policies.ranger_patrol || shrubs.some((tile) => tile.maturity >= 3 && tile.stress === 0);
+      if (!success) {
+        const tile = [...meadows, ...shrubs, ...forests, ...wetlands].find((item) => item.stress < 3);
+        damageTile(tile, 1);
+      }
+      result = success ? '巡护和健康边缘生境及时控制了入侵种。' : '藤蔓占据一个生态位，并混入行动牌库。';
+    } else if (crisis.id === 'cold_snap') {
+      success = hasTrait(state, 'insect_hotel') || hasTrait(state, 'long_bloom') || forests.some((tile) => tile.maturity >= 3);
+      if (!success) meadows.filter((tile) => tile.traits.includes('flowers')).forEach((tile) => damageTile(tile, 1));
+      result = success ? '越冬庇护让昆虫躲过异常寒潮。' : '传粉者缺少庇护，花草地暂时受压。';
+    }
+    state.crisesHandled += 1;
+    if (success) state.crisesSucceeded += 1;
+    const statusIds = success ? [] : [crisis.status];
+    if (!success && state.turn >= 12 && ['spill', 'invasion'].includes(crisis.id)) statusIds.push(crisis.status);
+    state.crisisHistory.push({ turn: state.turn, crisisId: crisis.id, success, text: result });
+    state.lastLog = { icon: crisis.icon, title: `${crisis.name} · ${success ? '成功化解' : '造成后果'}`, text: result };
+    state.history.push({ turn: state.turn, type: 'crisis', title: crisis.name, text: result, success });
+    derive(state);
+    return { success, statusIds, title: crisis.name, text: result };
+  }
+
+  function evaluateMilestone(state, milestone) {
+    if (!milestone) return null;
+    let checks;
+    if (milestone.turn === 4) {
+      checks = [
+        { label: '完成至少2项生态工程', ok: state.completedProjects >= 2, value: state.completedProjects, target: 2 },
+        { label: '溪流旁存在非退化生境', ok: state.tiles.some((tile) => tile.terrain === 'stream' && neighbors(state, tile.id).some((other) => !['barren', 'coast'].includes(other.terrain))), value: '查看岛屿', target: '' }
+      ];
+    } else if (milestone.turn === 8) {
+      checks = [
+        { label: '形成至少1个生态结构', ok: state.activeNetworks.length >= 1, value: state.activeNetworks.length, target: 1 },
+        { label: '负面牌不超过3张', ok: statusCount(state) <= 3, value: statusCount(state), target: 3, lowerIsBetter: true }
+      ];
+    } else if (milestone.turn === 12) {
+      const speciesPresent = Object.values(state.species).filter((value) => value >= 8).length;
+      checks = [
+        { label: '至少6种物种定居', ok: speciesPresent >= 6, value: speciesPresent, target: 6 },
+        { label: '拥有捕食或湿地网络', ok: state.activeNetworks.some((id) => ['predator_balance', 'wetland_revival'].includes(id)), value: '查看结构', target: '' }
+      ];
     } else {
-      state.milestones.debt += 1;
-      state.stats.stability -= 5;
-      state.stats.pollution += 3;
+      const ratio = state.crisesHandled ? state.crisesSucceeded / state.crisesHandled : 0;
+      checks = [{ label: '成功化解至少一半危机', ok: ratio >= 0.5, value: `${state.crisesSucceeded}/${state.crisesHandled}`, target: '≥ 50%' }];
     }
-    applyMetricCaps(state);
-    return result;
+    return { ...milestone, checks, success: checks.every((check) => check.ok) };
   }
 
   function getMilestonePreview(state) {
-    const next = data.milestones.find((milestone) => !state.milestones.records.some((record) => record.day === milestone.day));
-    if (!next) return { complete: true, caps: getMetricCaps(state), completed: state.milestones.completed };
-    return {
-      milestone: next,
-      completed: state.milestones.completed,
-      caps: getMetricCaps(state),
-      checks: next.checks.map((check) => ({ label: check.label, passed: check.test(state), value: Math.round(check.value(state)), target: check.target, lowerIsBetter: check.lowerIsBetter }))
-    };
+    const next = data.milestones.find((milestone) => milestone.turn >= state.turn && !state.milestones.records.some((record) => record.turn === milestone.turn));
+    return next ? evaluateMilestone(state, next) : null;
   }
 
-  function getStage(day) { return data.stages.find((stage) => day <= stage.until) || data.stages[data.stages.length - 1]; }
-  function getDiscovered(state) { return data.species.filter((item) => state.species[item.id] >= 6); }
-  function effectText(effects, maximum) {
-    const result = [];
-    const add = (key, value) => {
-      const item = data.species.find((species) => species.id === key);
-      const label = item ? item.name : data.statLabels[key] || key;
-      result.push({ label, value });
-    };
-    Object.entries((effects && effects.stats) || {}).forEach(([key, value]) => add(key, value));
-    Object.entries((effects && effects.species) || {}).forEach(([key, value]) => add(key, value));
-    return result.slice(0, maximum || result.length);
+  function getStage(turn) { return data.stages.find((stage) => turn <= stage.until) || data.stages[data.stages.length - 1]; }
+  function qualitative(value, inverse) {
+    const score = inverse ? 100 - value : value;
+    if (score < 22) return '危急';
+    if (score < 42) return '脆弱';
+    if (score < 62) return '恢复中';
+    if (score < 82) return '稳定';
+    return '繁荣';
+  }
+  function getDiscovered(state) { return data.species.filter((item) => state.species[item.id] >= 8); }
+  function finalScore(state) {
+    derive(state);
+    return Math.round(state.stats.biodiversity * 0.25 + state.stats.stability * 0.3 + state.stats.habitat * 0.25 + state.stats.foodChain * 0.2);
   }
 
-  window.Ecosystem = { clamp, createInitialState, applyEffects, applyCard, simulate, applyEvent, evaluateMilestone, getMilestonePreview, getMetricCaps, calculateMetrics, getStage, getDiscovered, effectText };
+  window.Ecosystem = {
+    clamp, adjacency, createInitialState, tileById, neighbors, getCard, validTargets, playCard,
+    derive, processRound, resolveCrisis, evaluateNetworks, evaluateMilestone, getMilestonePreview,
+    getStage, qualitative, getDiscovered, statusCount, finalScore, terrainCount, hasTrait, totalPollution
+  };
 })();

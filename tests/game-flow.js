@@ -1,0 +1,49 @@
+/* Coordinator smoke test with a tiny DOM/UI stub. */
+global.window = global;
+global.document = {
+  addEventListener() {},
+  querySelector() { return null; },
+  body: { classList: { add() {}, remove() {} } }
+};
+global.window.confirm = () => true;
+
+require('../js/data.js');
+require('../js/ecosystem.js');
+
+let resultsShown = false;
+global.IslandUI = {
+  showScreen() {}, render() {}, toast() {}, openGuide() {}, openCodex() {}, openNetwork() {},
+  showTileDetails() {}, flashNetwork() {}, closeModal() {},
+  playCardAnimation: async () => {},
+  showReward: async () => null,
+  showUpgrade: async (cards) => cards[0]?.id || null,
+  showCrisis: async () => {},
+  showMilestone: async () => {},
+  renderResults: () => { resultsShown = true; }
+};
+global.IslandAudio = { click() {}, choice() {}, event() {}, success() {} };
+require('../js/main.js');
+
+const assert = require('node:assert/strict');
+
+(async () => {
+  Game.startNew(false);
+  assert.equal(Game.state.deck.hand.length, 5);
+  assert.equal(Game.state.forecasts.length, 3);
+
+  const targetInstance = ['hand', 'drawPile', 'discardPile'].flatMap((key) => Game.state.deck[key]).find((instance) => instance.cardId === 'sow_meadow');
+  ['hand', 'drawPile', 'discardPile'].forEach((key) => { Game.state.deck[key] = Game.state.deck[key].filter((instance) => instance.uid !== targetInstance.uid); });
+  Game.state.deck.hand.push(targetInstance);
+  Game.state.energy.current = 9;
+  await Game.selectCard(targetInstance.uid);
+  assert.equal(Game.pendingCardUid, targetInstance.uid);
+  const targetId = Ecosystem.validTargets(Game.state, Game.getInstanceCard(targetInstance.uid))[0];
+  await Game.selectTile(targetId);
+  assert(Game.state.tiles[targetId].project);
+
+  for (let completed = 0; completed < 20; completed += 1) await Game.endRound();
+  assert.equal(resultsShown, true);
+  assert.equal(Game.state.turn, 20);
+  assert(Game.state.crisesHandled > 0);
+  console.log(`Game flow OK: crises=${Game.state.crisesHandled}, statuses=${Ecosystem.statusCount(Game.state)}`);
+})().catch((error) => { console.error(error); process.exitCode = 1; });
