@@ -16,7 +16,7 @@
         <p class="eyebrow">100 DAYS OF BIODIVERSITY</p>
         <h1>一座岛的<br><em>100天</em></h1>
         <p class="tagline">让生命重新回到这座岛。</p>
-        <p class="start-intro">经营一座连续生长的岛屿，预判未来危机，用20个回合把栖息地重新连成一张会自我调节的生命网络。</p>
+        <p class="start-intro">每回合拖动卡牌恢复岛屿，花费行动力，再结束回合。保护它平安度过100天。</p>
         <div class="start-actions">
           <button class="button primary large" data-action="start">开始恢复生态 <span>→</span></button>
           <button class="button ghost" data-action="open-codex">生态图鉴</button>
@@ -77,12 +77,13 @@
 
       <section class="actions-section">
         <div class="action-heading">
-          <div><p class="kicker">生态行动牌组</p><h2>安排今天的恢复行动</h2></div>
+          <div><p class="kicker">你现在要做的事</p><h2>把一张牌向上拖动并松手</h2></div>
           <div class="turn-controls">
-            <div class="energy-orb" title="每回合恢复；跳过卡牌奖励可为下回合增加1点"><span>⚡</span><strong id="energy-current">3</strong><small>/ <b id="energy-max">3</b></small></div>
+            <div class="energy-wrap"><small>本回合行动力</small><div class="energy-orb" title="每回合恢复；每张牌左上角写着消耗"><span>⚡</span><strong id="energy-current">3</strong><small>/ <b id="energy-max">3</b></small></div></div>
             <button id="end-day-button" class="end-day-button" data-action="end-day">结束回合 <span>→</span></button>
           </div>
         </div>
+        <div id="tutorial-coach" class="tutorial-coach" aria-live="polite"></div>
         <div id="play-drop-zone" class="play-drop-zone"><span>↑</span><b>松手使用卡牌</b></div>
         <div id="combo-banner" class="combo-banner" aria-live="polite"></div>
         <div id="action-cards" class="action-cards"></div>

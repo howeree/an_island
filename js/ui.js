@@ -122,18 +122,51 @@
     $('#insight-card').innerHTML = `<p class="kicker">现场记录</p><h2>${escapeHtml(state.lastLog.title)}</h2><p>${escapeHtml(state.lastLog.text)}</p>${networks.length ? `<div class="network-chips">${networks.map((network) => `<span title="${escapeHtml(network.text)}">${network.icon} ${network.name}</span>`).join('')}</div>` : '<small class="no-network">尚未形成稳定生态结构。不同栖息地的组合比单项数值更重要。</small>'}`;
   }
 
+  function simpleEffect(card) {
+    if (card.action === 'project') return `建设${data.terrainMeta[card.terrain].name}${card.duration ? `，${card.duration}回合完成` : '，立即完成'}`;
+    if (card.action === 'trait') return `为岛屿加入「${data.traitMeta[card.trait].name}」`;
+    if (card.action === 'clean') return `降低 ${card.power} 层污染`;
+    if (card.action === 'cleanse_tile') return '清除生态压力与入侵影响';
+    if (card.action === 'policy') return '打出后整局持续生效';
+    if (card.action === 'draw') return `立刻再抽 ${card.draw} 张牌`;
+    if (card.action === 'focus') return `获得 ${card.energy || 0} 行动力，再抽 ${card.draw || 0} 张牌`;
+    if (card.action === 'purge') return '永久移除一张负面牌';
+    if (card.action === 'introduce') return `让${data.species.find((item) => item.id === card.species).name}回到岛上`;
+    if (card.action === 'status') return '花费行动力处理这张负面牌';
+    if (card.action === 'rewild') return '让健康生境自然成长';
+    return '立即执行生态行动';
+  }
+
+  function renderCoach(state, game) {
+    const root = $('#tutorial-coach');
+    const recommendation = game.getRecommendation();
+    const played = state.cardsPlayedThisRound || 0;
+    const endButton = $('#end-day-button');
+    endButton.classList.toggle('coach-highlight', !recommendation || state.energy.current <= 0);
+    if (!recommendation) {
+      root.className = 'tutorial-coach end-step';
+      root.innerHTML = `<span class="coach-number">2</span><div><small>现在做这一步</small><h3>点击“结束回合”</h3><p>${state.energy.current <= 0 ? '行动力已经用完。' : '当前手牌暂时没有可用行动。'}结束后工程会推进，行动力和手牌会刷新。</p></div><div class="coach-arrow">→</div>`;
+      return;
+    }
+    const firstMove = state.turn === 1 && played === 0;
+    root.className = `tutorial-coach ${firstMove ? 'first-step' : ''}`;
+    root.innerHTML = `<span class="coach-number">${firstMove ? '1' : '✓'}</span><div class="coach-copy"><small>${firstMove ? '先学会出牌，其他暂时不用管' : played ? `本回合已打出 ${played} 张牌` : '本回合建议'}</small><h3>${firstMove ? '按住推荐牌，向上拖动后松手' : `推荐：${escapeHtml(recommendation.card.title)}`}</h3><p>${firstMove ? `先试试「${escapeHtml(recommendation.card.title)}」。看到绿色“松手使用”提示时放开鼠标。` : escapeHtml(recommendation.reason)}</p></div><div class="coach-gesture"><span>${recommendation.card.icon}</span><i>↑</i><b>拖动</b></div>`;
+  }
+
   function renderCards(state, game) {
     const root = $('#action-cards');
     const cards = game.getHandCards();
+    const recommendation = game.getRecommendation();
     root.innerHTML = cards.map(({ instance, card }, index) => {
       const canAfford = state.energy.current >= card.cost;
       const targets = card.target ? eco.validTargets(state, card).length : 1;
       const unplayable = !canAfford || targets === 0 || game.busy;
+      const recommended = recommendation && recommendation.instance.uid === instance.uid;
       const targetText = card.target ? '自动选择最合适位置' : card.action === 'policy' ? '持续生效' : card.action === 'status' ? '打出后移除' : '立即行动';
-      return `<article class="action-card ${card.type === '负面' ? 'status-card' : ''} ${unplayable ? 'unplayable' : ''}" data-card-uid="${instance.uid}" data-card-index="${index}" tabindex="0" role="button" aria-label="向上拖动使用${escapeHtml(card.title)}">
-        <div class="card-cost">${card.cost}</div><div class="card-rarity">${escapeHtml(card.rarity)}</div>
+      return `<article class="action-card ${card.type === '负面' ? 'status-card' : ''} ${recommended ? 'recommended' : ''} ${unplayable ? 'unplayable' : ''}" data-card-uid="${instance.uid}" data-card-index="${index}" tabindex="0" role="button" aria-label="向上拖动使用${escapeHtml(card.title)}">
+        ${recommended ? '<div class="recommend-ribbon">推荐先用</div>' : ''}<div class="card-cost"><span>⚡</span>${card.cost}</div><div class="card-rarity">${escapeHtml(card.rarity)}</div>
         <div class="card-art"><span>${card.icon}</span><i></i></div>
-        <div class="card-copy"><small>${escapeHtml(card.type)}${card.upgraded ? ' · 已升级' : ''}</small><h3>${escapeHtml(card.title)}</h3><p>${escapeHtml(card.text)}</p></div>
+        <div class="card-copy"><small>${escapeHtml(card.type)}${card.upgraded ? ' · 已升级' : ''}</small><h3>${escapeHtml(card.title)}</h3><div class="card-simple-effect"><em>效果</em><b>${escapeHtml(simpleEffect(card))}</b></div><p>${escapeHtml(card.text)}</p></div>
         <div class="card-target-hint">${card.target ? '⌖' : '◇'} ${escapeHtml(targetText)}</div>
         <div class="drag-instruction"><span>↑</span> 向上拖动</div>
       </article>`;
@@ -151,6 +184,7 @@
     renderForecast(state);
     renderIsland(state);
     renderSidebar(state);
+    renderCoach(state, game);
     renderCards(state, game);
   }
 
@@ -179,14 +213,14 @@
   }
 
   function openGuide() {
-    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">新核心玩法</p><h2>不是把四个数字堆满</h2>
-      <div class="guide-grid">
-        <article><b>1 · 看预警</b><p>未来三次危机始终公开。每轮代表5天，你要决定是发展，还是提前防灾。</p></article>
-        <article><b>2 · 经营整座岛屿</b><p>岛屿不再需要手动分区。工程会自动落在最合适的位置，但栖息地容量仍然有限。</p></article>
-        <article><b>3 · 拼生态结构</b><p>湿地、溪流、水草与物种必须彼此支持才会形成 Combo；单独增加某个数值不会生效。</p></article>
-        <article><b>4 · 管理牌库污染</b><p>危机失败会加入负面牌，挤占手牌并持续伤害生境。用治理牌移除它们。</p></article>
-      </div><div class="guide-callout">操作只有一步：把卡牌向上拖动并松手。卡牌会立即生效，系统会自动选择最合适的位置。</div>`, 'wide-modal');
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">30秒上手</p><h2>每回合只做三件事</h2>
+      <div class="quick-guide">
+        <article><span>1</span><div><b>拖一张牌</b><p>按住卡牌向上拖，看到绿色提示后松手。黄色“推荐”牌可以直接照着用。</p></div></article>
+        <article><span>2</span><div><b>看看行动力</b><p>牌左上角是消耗。行动力不够时，这张牌本回合就不能用。</p></div></article>
+        <article><span>3</span><div><b>结束回合</b><p>工程会推进，危机可能发生，然后你会获得新的手牌与行动力。</p></div></article>
+      </div><div class="guide-callout"><b>第一局不必理解全部规则。</b> 跟着页面上的“现在做这一步”和黄色推荐牌操作即可。</div><button class="button primary full" data-guide-start>明白了，开始拖牌</button>`, 'guide-modal');
     $('[data-modal-close]').addEventListener('click', closeModal);
+    $('[data-guide-start]').addEventListener('click', closeModal);
   }
 
   function openCodex(state) {

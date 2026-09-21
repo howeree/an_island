@@ -29,6 +29,7 @@
         drawPile: shuffle(data.starterDeck.map((id) => this.makeInstance(id))),
         discardPile: [], hand: [], exhaustPile: []
       };
+      this.state.cardsPlayedThisRound = 0;
       this.drawCards(HAND_SIZE);
     },
 
@@ -41,6 +42,57 @@
     },
     getHandCards() {
       return this.state.deck.hand.map((instance) => ({ instance, card: eco.getCard(instance.cardId, this.state) })).filter((entry) => entry.card);
+    },
+
+    getRecommendation() {
+      const playable = this.getHandCards().filter(({ card }) => {
+        if (card.cost > this.state.energy.current) return false;
+        return !card.target || eco.validTargets(this.state, card).length > 0;
+      });
+      if (!playable.length) return null;
+      const status = playable.find(({ card }) => card.type === '负面');
+      if (status) return { ...status, reason: '负面牌会继续伤害岛屿，能处理时优先处理。' };
+
+      const nextForecast = this.state.forecasts && this.state.forecasts[0];
+      const crisis = nextForecast ? data.crises.find((item) => item.id === nextForecast.crisisId) : null;
+      const counters = {
+        drought: ['restore_wetland', 'groundwater', 'water_watch', 'restore_stream'],
+        flood: ['restore_wetland', 'plant_forest', 'groundwater'],
+        rabbit_boom: ['fox_sanctuary', 'eco_corridor', 'plant_shrubs'],
+        spill: ['cleanup', 'aquatic_plants', 'restore_wetland'],
+        visitors: ['visitor_limits', 'ranger_patrol', 'shore_cleanup'],
+        wildfire: ['controlled_burn', 'groundwater', 'restore_wetland'],
+        invasion: ['invasive_control', 'ranger_patrol', 'plant_shrubs'],
+        cold_snap: ['insect_hotel', 'pollinator_garden', 'plant_forest']
+      };
+      if (crisis) {
+        const preferred = counters[crisis.id] || [];
+        const counter = preferred.map((id) => playable.find(({ card }) => card.id === id)).find(Boolean);
+        if (counter) return { ...counter, reason: `它能为“${crisis.name}”提前做准备。` };
+      }
+
+      const score = ({ card }) => {
+        let value = card.action === 'project' ? 9 : card.action === 'trait' ? 7 : card.action === 'clean' ? 6 : card.action === 'policy' ? 5 : 3;
+        if (card.id === 'cleanup') value += eco.totalPollution(this.state) * 2;
+        if (card.id === 'native_flowers' && !eco.hasTrait(this.state, 'flowers')) value += 6;
+        if (card.id === 'sow_meadow' && eco.terrainCount(this.state, 'meadow') < 2) value += 5;
+        if (card.id === 'plant_forest' && eco.terrainCount(this.state, 'forest') < 2) value += 4;
+        if (card.policy && this.state.policies[card.policy]) value -= 8;
+        value -= card.cost * 0.4;
+        return value;
+      };
+      playable.sort((a, b) => score(b) - score(a));
+      const chosen = playable[0];
+      const reasons = {
+        project: '先建立基础栖息地，后续物种和 Combo 才有条件出现。',
+        trait: '它能补上生态结构缺少的一环。',
+        clean: '污染会削弱整个岛屿，尽早治理更安全。',
+        policy: '政策一旦生效，会在之后的回合持续提供保护。',
+        draw: '它能增加本回合的选择。',
+        focus: '它能补充行动力并带来更多选择。',
+        purge: '它能保持牌组干净，避免坏牌越积越多。'
+      };
+      return { ...chosen, reason: reasons[chosen.card.action] || '它符合当前岛屿的恢复条件。' };
     },
 
     recycleDeck() {
@@ -188,6 +240,7 @@
       }
       if (card.energy) this.state.energy.current += card.energy;
       if (card.draw) this.drawCards(card.draw);
+      this.state.cardsPlayedThisRound += 1;
       eco.derive(this.state);
       const newNetworks = this.state.discoveredNetworks.filter((id) => !discoveredBefore.has(id));
       this.busy = false;
@@ -278,6 +331,7 @@
       }
       this.state.energy.current = this.state.energy.max + this.state.energy.reserve;
       this.state.energy.reserve = 0;
+      this.state.cardsPlayedThisRound = 0;
       this.drawCards(HAND_SIZE);
       eco.derive(this.state);
       this.busy = false;
