@@ -41,9 +41,9 @@ const assert = require('node:assert/strict');
   assert.equal(Game.state.cardsPlayedThisRound, 1);
   assert(Game.state.tiles.some((tile) => tile.project && tile.project.cardId === 'sow_meadow'));
 
-  for (let completed = 0; completed < 20; completed += 1) await Game.endRound();
+  for (let completed = 0; completed < 100; completed += 1) await Game.endRound();
   assert.equal(resultsShown, true);
-  assert.equal(Game.state.turn, 20);
+  assert.equal(Game.state.turn, 100);
   assert(Game.state.crisesHandled > 0);
   console.log(`Game flow OK: crises=${Game.state.crisesHandled}, statuses=${Ecosystem.statusCount(Game.state)}`);
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-/* Rules for the 20-round, tile-based ecological simulation. */
+/* Rules for the 100-day ecological simulation. */
 (function () {
   const data = window.IslandData;
   const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
@@ -14,7 +14,7 @@
     const state = {
       turn: 1,
       day: 1,
-      totalTurns: 20,
+      totalTurns: 100,
       tiles: [
         { id: 0, terrain: 'barren', maturity: 0, pollution: 1, stress: 0, traits: [], project: null },
         { id: 1, terrain: 'stream', maturity: 1, pollution: 2, stress: 1, traits: [], project: null },
@@ -96,7 +96,7 @@
     if (card.action === 'project' && tile) {
       tile.project = { cardId: card.id, name: card.title, terrain: card.terrain, remaining: card.duration, duration: card.duration };
       if (card.duration <= 0) text = completeProject(state, tile);
-      else text = `在${data.terrainMeta[tile.terrain].name}启动工程，${card.duration}回合后完成。`;
+      else text = `在${data.terrainMeta[tile.terrain].name}启动工程，${card.duration}天后完成。`;
     } else if (card.action === 'trait' && tile) {
       if (card.trait === 'long_bloom') tile.traits = tile.traits.filter((trait) => trait !== 'flowers');
       tile.traits.push(card.trait);
@@ -163,8 +163,8 @@
     state.species.dragonfly = (hasTrait(state, 'aquatic') && water > 30) ? clamp(12 + maturity('wetland') * 12) : 0;
     state.species.frog = (hasTrait(state, 'frog_pond') && state.species.dragonfly > 0) || state.activeNetworks.includes('wetland_revival') ? clamp(15 + maturity('wetland') * 12) : 0;
     state.species.songbird = (count('shrub') && count('forest')) || hasTrait(state, 'nest_boxes') ? clamp(10 + maturity('forest') * 7 + (hasTrait(state, 'nest_boxes') ? 16 : 0)) : 0;
-    state.species.rabbit = state.introduced.rabbit !== undefined ? clamp(24 + maturity('meadow') * 7 - (state.activeNetworks.includes('predator_balance') ? 8 : 0)) : ((state.turn >= 6 && count('meadow') && count('shrub')) ? 9 : 0);
-    state.species.deer = (state.turn >= 11 && count('meadow') && count('forest') && hasTrait(state, 'corridor')) ? 12 : 0;
+    state.species.rabbit = state.introduced.rabbit !== undefined ? clamp(24 + maturity('meadow') * 7 - (state.activeNetworks.includes('predator_balance') ? 8 : 0)) : ((state.turn >= 30 && count('meadow') && count('shrub')) ? 9 : 0);
+    state.species.deer = (state.turn >= 55 && count('meadow') && count('forest') && hasTrait(state, 'corridor')) ? 12 : 0;
     state.species.fox = state.introduced.fox !== undefined ? 24 : 0;
     state.species.owl = state.activeNetworks.includes('forest_refuge') ? 18 : 0;
     state.species.waterbird = state.activeNetworks.includes('coastal_route') || (state.policies.migration_refuge && count('wetland')) ? 18 : 0;
@@ -228,19 +228,19 @@
       if (tile.project.remaining <= 0) logs.push(completeProject(state, tile));
     });
 
-    if (state.turn % 2 === 0) {
+    if (state.turn % 10 === 0) {
       state.tiles.filter((tile) => !tile.project && !['barren', 'coast'].includes(tile.terrain) && tile.stress === 0 && tile.pollution <= 1 && tile.maturity < 3).forEach((tile) => { tile.maturity += 1; });
     }
-    if (state.turn % 4 === 0 && state.policies.seed_bank) {
+    if (state.turn % 20 === 0 && state.policies.seed_bank) {
       const barren = state.tiles.find((tile) => tile.terrain === 'barren' && tile.pollution > 0);
       if (barren) { barren.pollution -= 1; logs.push('种子库志愿者净化了一处退化区域'); }
     }
     state.tiles.forEach((tile) => {
-      if (tile.stress > 0 && Math.random() < 0.25) tile.stress -= 1;
+      if (tile.stress > 0 && Math.random() < 0.06) tile.stress -= 1;
     });
     derive(state);
 
-    if (state.species.rabbit >= 30 && !state.activeNetworks.includes('predator_balance')) {
+    if (state.turn % 5 === 0 && state.species.rabbit >= 30 && !state.activeNetworks.includes('predator_balance')) {
       const meadow = state.tiles.find((tile) => tile.terrain === 'meadow' && tile.stress < 3);
       if (meadow) { meadow.stress += 1; logs.push('缺少捕食者，兔群开始挤压草地'); }
     }
@@ -303,7 +303,7 @@
     state.crisesHandled += 1;
     if (success) state.crisesSucceeded += 1;
     const statusIds = success ? [] : [crisis.status];
-    if (!success && state.turn >= 12 && ['spill', 'invasion'].includes(crisis.id)) statusIds.push(crisis.status);
+    if (!success && state.turn >= 60 && ['spill', 'invasion'].includes(crisis.id)) statusIds.push(crisis.status);
     state.crisisHistory.push({ turn: state.turn, crisisId: crisis.id, success, text: result });
     state.lastLog = { icon: crisis.icon, title: `${crisis.name} · ${success ? '成功化解' : '造成后果'}`, text: result };
     state.history.push({ turn: state.turn, type: 'crisis', title: crisis.name, text: result, success });
@@ -314,17 +314,17 @@
   function evaluateMilestone(state, milestone) {
     if (!milestone) return null;
     let checks;
-    if (milestone.turn === 4) {
+    if (milestone.turn === 20) {
       checks = [
         { label: '完成至少2项生态工程', ok: state.completedProjects >= 2, value: state.completedProjects, target: 2 },
         { label: '溪流旁存在非退化生境', ok: state.tiles.some((tile) => tile.terrain === 'stream' && neighbors(state, tile.id).some((other) => !['barren', 'coast'].includes(other.terrain))), value: '查看岛屿', target: '' }
       ];
-    } else if (milestone.turn === 8) {
+    } else if (milestone.turn === 40) {
       checks = [
         { label: '形成至少1个生态结构', ok: state.activeNetworks.length >= 1, value: state.activeNetworks.length, target: 1 },
         { label: '负面牌不超过3张', ok: statusCount(state) <= 3, value: statusCount(state), target: 3, lowerIsBetter: true }
       ];
-    } else if (milestone.turn === 12) {
+    } else if (milestone.turn === 60) {
       const speciesPresent = Object.values(state.species).filter((value) => value >= 8).length;
       checks = [
         { label: '至少6种物种定居', ok: speciesPresent >= 6, value: speciesPresent, target: 6 },

@@ -1,4 +1,4 @@
-/* Game coordinator: deck instances, targeting, forecasts and round flow. */
+/* Game coordinator: deck instances, forecasts and the day-by-day flow. */
 (function () {
   const data = window.IslandData;
   const eco = window.Ecosystem;
@@ -87,8 +87,8 @@
         project: '先建立基础栖息地，后续物种和 Combo 才有条件出现。',
         trait: '它能补上生态结构缺少的一环。',
         clean: '污染会削弱整个岛屿，尽早治理更安全。',
-        policy: '政策一旦生效，会在之后的回合持续提供保护。',
-        draw: '它能增加本回合的选择。',
+        policy: '政策一旦生效，会在之后的日子持续提供保护。',
+        draw: '它能增加今天的选择。',
         focus: '它能补充行动力并带来更多选择。',
         purge: '它能保持牌组干净，避免坏牌越积越多。'
       };
@@ -117,11 +117,11 @@
         const lastDue = queue.length ? queue[queue.length - 1].dueTurn : Math.max(2, this.state.turn + 1);
         const lastIds = queue.slice(-2).map((item) => item.crisisId);
         let pool = data.crises.filter((crisis) => !lastIds.includes(crisis.id));
-        if (this.state.turn < 5) pool = pool.filter((crisis) => !['wildfire', 'rabbit_boom'].includes(crisis.id));
-        if (this.state.turn < 8) pool = pool.filter((crisis) => crisis.id !== 'rabbit_boom' || this.state.species.rabbit > 0);
+        if (this.state.turn < 25) pool = pool.filter((crisis) => !['wildfire', 'rabbit_boom'].includes(crisis.id));
+        if (this.state.turn < 40) pool = pool.filter((crisis) => crisis.id !== 'rabbit_boom' || this.state.species.rabbit > 0);
         if (!pool.length) pool = data.crises;
         const crisis = pool[Math.floor(Math.random() * pool.length)];
-        const spacing = this.state.policies.water_watch && crisis.id === 'drought' ? 3 : 2;
+        const spacing = this.state.policies.water_watch && crisis.id === 'drought' ? 15 : 10;
         const dueTurn = lastDue + spacing;
         if (dueTurn > this.state.totalTurns) break;
         queue.push({ crisisId: crisis.id, dueTurn });
@@ -265,7 +265,7 @@
     },
 
     async handleRewards(milestoneResult) {
-      if (this.state.turn % 2 === 0) {
+      if (this.state.turn % 10 === 0) {
         const options = this.rewardOptions();
         if (options.length) {
           const choice = await ui.showReward(options);
@@ -274,11 +274,11 @@
             this.state.lastLog = { icon: '▰', title: '牌组获得新方案', text: `「${eco.getCard(choice, this.state).title}」已加入弃牌堆。` };
           } else {
             this.state.energy.reserve += 1;
-            this.state.lastLog = { icon: '⚡', title: '保持精简', text: '你跳过了卡牌奖励，下回合获得额外1点能量。' };
+            this.state.lastLog = { icon: '⚡', title: '保持精简', text: '你跳过了卡牌奖励，明天获得额外1点能量。' };
           }
         }
       }
-      if (milestoneResult && milestoneResult.success && milestoneResult.turn % 4 === 0) {
+      if (milestoneResult && milestoneResult.success && milestoneResult.turn % 20 === 0) {
         const options = this.upgradeOptions();
         if (options.length) {
           const choice = await ui.showUpgrade(options);
@@ -295,7 +295,7 @@
       this.state.deck.discardPile.push(...this.state.deck.hand);
       this.state.deck.hand = [];
       eco.processRound(this.state, heldStatusIds);
-      if (heldStatusIds.includes('invasive_vine') && Math.random() < 0.4 && !this.state.policies.ranger_patrol) this.addStatus('invasive_vine');
+      if (heldStatusIds.includes('invasive_vine') && Math.random() < 0.08 && !this.state.policies.ranger_patrol) this.addStatus('invasive_vine');
 
       const due = this.state.forecasts.filter((forecast) => forecast.dueTurn <= this.state.turn);
       this.state.forecasts = this.state.forecasts.filter((forecast) => forecast.dueTurn > this.state.turn);
@@ -324,8 +324,8 @@
         return;
       }
       this.state.turn += 1;
-      this.state.day = (this.state.turn - 1) * 5 + 1;
-      if ([7, 14].includes(this.state.turn)) {
+      this.state.day = this.state.turn;
+      if ([35, 70].includes(this.state.turn)) {
         this.state.energy.max += 1;
         ui.toast(`生态行动力上限提升为 ${this.state.energy.max}。`);
       }

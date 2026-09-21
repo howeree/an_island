@@ -33,10 +33,8 @@
   }
 
   function renderStatus(state) {
-    const startDay = (state.turn - 1) * 5 + 1;
-    const endDay = Math.min(100, state.turn * 5);
-    setText('#day-label', `第 ${startDay}–${endDay} 天 · 回合 ${state.turn}/20`);
-    $('#day-progress').style.width = `${Math.min(100, state.turn * 5)}%`;
+    setText('#day-label', `第 ${state.day} / 100 天`);
+    $('#day-progress').style.width = `${Math.min(100, state.day)}%`;
     const stage = eco.getStage(state.turn);
     setText('#stage-label', stage.name);
     setText('#scene-caption', stage.text);
@@ -60,7 +58,7 @@
       const distance = Math.max(0, forecast.dueTurn - state.turn);
       return `<article class="forecast-card ${index === 0 ? 'next' : ''}">
         <span class="forecast-icon">${crisis.icon}</span>
-        <div><small>${distance === 0 ? '本回合结算' : `${distance} 回合后`}</small><strong>${escapeHtml(crisis.name)}</strong><p>${escapeHtml(crisis.intent)}</p></div>
+        <div><small>${distance === 0 ? '今天结算' : `${distance} 天后`}</small><strong>${escapeHtml(crisis.name)}</strong><p>${escapeHtml(crisis.intent)}</p></div>
         <span class="forecast-help" title="应对：${escapeHtml(crisis.counter)}">?</span>
       </article>`;
     }).join('')}`;
@@ -88,7 +86,7 @@
       const spot = creatureSpots[index];
       return `<span class="unified-token creature-token" style="--x:${spot[0]}%;--y:${spot[1]}%;--delay:${(index % 4) * -.55}s" title="${escapeHtml(item.name)}">${item.icon}</span>`;
     }).join('');
-    const projects = state.tiles.filter((tile) => tile.project).map((tile) => `<span><i></i>${escapeHtml(tile.project.name)} · ${tile.project.remaining}回合</span>`).join('');
+    const projects = state.tiles.filter((tile) => tile.project).map((tile) => `<span><i></i>${escapeHtml(tile.project.name)} · ${tile.project.remaining}天</span>`).join('');
     const totalStress = state.tiles.reduce((sum, tile) => sum + tile.stress, 0);
     const totalPollution = eco.totalPollution(state);
     const wetland = eco.terrainCount(state, 'wetland') > 0;
@@ -116,14 +114,14 @@
     }).join('');
 
     const preview = eco.getMilestonePreview(state);
-    $('#strategy-card').innerHTML = preview ? `<div class="card-heading"><div><p class="kicker">阶段目标 · 第${preview.day}天</p><h2>${escapeHtml(preview.name)}</h2></div><span>${preview.success ? '已就绪' : '规划中'}</span></div><p>${escapeHtml(preview.description)}</p><div class="milestone-mini">${preview.checks.map((check) => `<span class="${check.ok ? 'done' : ''}">${check.ok ? '✓' : '○'} ${escapeHtml(check.label)}</span>`).join('')}</div>` : `<p class="kicker">最终目标</p><h2>让岛屿能自己运转</h2><p>剩余回合用于补强最脆弱的生态结构。</p>`;
+    $('#strategy-card').innerHTML = preview ? `<div class="card-heading"><div><p class="kicker">阶段目标 · 第${preview.day}天</p><h2>${escapeHtml(preview.name)}</h2></div><span>${preview.success ? '已就绪' : '规划中'}</span></div><p>${escapeHtml(preview.description)}</p><div class="milestone-mini">${preview.checks.map((check) => `<span class="${check.ok ? 'done' : ''}">${check.ok ? '✓' : '○'} ${escapeHtml(check.label)}</span>`).join('')}</div>` : `<p class="kicker">最终目标</p><h2>让岛屿能自己运转</h2><p>剩余时间用于补强最脆弱的生态结构。</p>`;
 
     const networks = state.activeNetworks.map((id) => data.comboMeta[id]);
     $('#insight-card').innerHTML = `<p class="kicker">现场记录</p><h2>${escapeHtml(state.lastLog.title)}</h2><p>${escapeHtml(state.lastLog.text)}</p>${networks.length ? `<div class="network-chips">${networks.map((network) => `<span title="${escapeHtml(network.text)}">${network.icon} ${network.name}</span>`).join('')}</div>` : '<small class="no-network">尚未形成稳定生态结构。不同栖息地的组合比单项数值更重要。</small>'}`;
   }
 
   function simpleEffect(card) {
-    if (card.action === 'project') return `建设${data.terrainMeta[card.terrain].name}${card.duration ? `，${card.duration}回合完成` : '，立即完成'}`;
+    if (card.action === 'project') return `建设${data.terrainMeta[card.terrain].name}${card.duration ? `，${card.duration}天完成` : '，立即完成'}`;
     if (card.action === 'trait') return `为岛屿加入「${data.traitMeta[card.trait].name}」`;
     if (card.action === 'clean') return `降低 ${card.power} 层污染`;
     if (card.action === 'cleanse_tile') return '清除生态压力与入侵影响';
@@ -145,12 +143,12 @@
     endButton.classList.toggle('coach-highlight', !recommendation || state.energy.current <= 0);
     if (!recommendation) {
       root.className = 'tutorial-coach end-step';
-      root.innerHTML = `<span class="coach-number">2</span><div><small>现在做这一步</small><h3>点击“结束回合”</h3><p>${state.energy.current <= 0 ? '行动力已经用完。' : '当前手牌暂时没有可用行动。'}结束后工程会推进，行动力和手牌会刷新。</p></div><div class="coach-arrow">→</div>`;
+      root.innerHTML = `<span class="coach-number">2</span><div><small>现在做这一步</small><h3>点击“结束今天”</h3><p>${state.energy.current <= 0 ? '行动力已经用完。' : '当前手牌暂时没有可用行动。'}明天工程会继续推进，行动力和手牌也会刷新。</p></div><div class="coach-arrow">→</div>`;
       return;
     }
     const firstMove = state.turn === 1 && played === 0;
     root.className = `tutorial-coach ${firstMove ? 'first-step' : ''}`;
-    root.innerHTML = `<span class="coach-number">${firstMove ? '1' : '✓'}</span><div class="coach-copy"><small>${firstMove ? '先学会出牌，其他暂时不用管' : played ? `本回合已打出 ${played} 张牌` : '本回合建议'}</small><h3>${firstMove ? '按住推荐牌，向上拖动后松手' : `推荐：${escapeHtml(recommendation.card.title)}`}</h3><p>${firstMove ? `先试试「${escapeHtml(recommendation.card.title)}」。看到绿色“松手使用”提示时放开鼠标。` : escapeHtml(recommendation.reason)}</p></div><div class="coach-gesture"><span>${recommendation.card.icon}</span><i>↑</i><b>拖动</b></div>`;
+    root.innerHTML = `<span class="coach-number">${firstMove ? '1' : '✓'}</span><div class="coach-copy"><small>${firstMove ? '先学会出牌，其他暂时不用管' : played ? `今天已打出 ${played} 张牌` : '今日建议'}</small><h3>${firstMove ? '按住推荐牌，向上拖动后松手' : `推荐：${escapeHtml(recommendation.card.title)}`}</h3><p>${firstMove ? `先试试「${escapeHtml(recommendation.card.title)}」。看到绿色“松手使用”提示时放开鼠标。` : escapeHtml(recommendation.reason)}</p></div><div class="coach-gesture"><span>${recommendation.card.icon}</span><i>↑</i><b>拖动</b></div>`;
   }
 
   function renderCards(state, game) {
@@ -170,7 +168,7 @@
         <div class="card-target-hint">${card.target ? '⌖' : '◇'} ${escapeHtml(targetText)}</div>
         <div class="drag-instruction"><span>↑</span> 向上拖动</div>
       </article>`;
-    }).join('') || '<div class="empty-hand">手牌已空。你仍可提前结束本回合。</div>';
+    }).join('') || '<div class="empty-hand">手牌已空。你可以结束今天。</div>';
     setText('#energy-current', state.energy.current);
     setText('#energy-max', state.energy.max);
     setText('#draw-count', state.deck.drawPile.length);
@@ -213,12 +211,12 @@
   }
 
   function openGuide() {
-    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">30秒上手</p><h2>每回合只做三件事</h2>
+    openModal(`<button class="modal-close" data-modal-close aria-label="关闭">×</button><p class="kicker">30秒上手</p><h2>每天只做三件事</h2>
       <div class="quick-guide">
         <article><span>1</span><div><b>拖一张牌</b><p>按住卡牌向上拖，看到绿色提示后松手。黄色“推荐”牌可以直接照着用。</p></div></article>
-        <article><span>2</span><div><b>看看行动力</b><p>牌左上角是消耗。行动力不够时，这张牌本回合就不能用。</p></div></article>
-        <article><span>3</span><div><b>结束回合</b><p>工程会推进，危机可能发生，然后你会获得新的手牌与行动力。</p></div></article>
-      </div><div class="guide-callout"><b>第一局不必理解全部规则。</b> 跟着页面上的“现在做这一步”和黄色推荐牌操作即可。</div><button class="button primary full" data-guide-start>明白了，开始拖牌</button>`, 'guide-modal');
+        <article><span>2</span><div><b>看看行动力</b><p>牌左上角是消耗。行动力不够时，这张牌今天就不能用。</p></div></article>
+        <article><span>3</span><div><b>结束今天</b><p>工程会推进一天，危机可能发生，明天会获得新的手牌与行动力。</p></div></article>
+      </div><div class="guide-callout"><b>时间现在一天一天前进。</b> 第一局不必理解全部规则，跟着黄色推荐牌操作即可。</div><button class="button primary full" data-guide-start>明白了，开始拖牌</button>`, 'guide-modal');
     $('[data-modal-close]').addEventListener('click', closeModal);
     $('[data-guide-start]').addEventListener('click', closeModal);
   }
@@ -245,7 +243,7 @@
 
   function chooseCards(title, subtitle, cards, mode) {
     return new Promise((resolve) => {
-      openModal(`<p class="kicker">${mode === 'upgrade' ? '牌组升级' : '阶段奖励'}</p><h2>${escapeHtml(title)}</h2><p class="modal-lead">${escapeHtml(subtitle)}</p><div class="reward-grid">${cards.map((card) => `<button class="reward-card ${card.type === '负面' ? 'status-card' : ''}" data-choice="${card.id}"><span class="reward-icon">${card.icon}</span><small>${escapeHtml(card.rarity)} · ${escapeHtml(card.type)}</small><b>${escapeHtml(card.title)}${mode === 'upgrade' ? ' → +' : ''}</b><p>${escapeHtml(mode === 'upgrade' && card.upgrade && card.upgrade.text ? card.upgrade.text : card.text)}</p><em>${mode === 'upgrade' ? '升级此牌的所有副本' : `${card.cost} 能量`}</em></button>`).join('')}</div>${mode === 'reward' ? '<button class="button ghost reward-skip" data-skip>跳过，获得下回合 +1 能量</button>' : ''}`, 'wide-modal reward-modal');
+      openModal(`<p class="kicker">${mode === 'upgrade' ? '牌组升级' : '阶段奖励'}</p><h2>${escapeHtml(title)}</h2><p class="modal-lead">${escapeHtml(subtitle)}</p><div class="reward-grid">${cards.map((card) => `<button class="reward-card ${card.type === '负面' ? 'status-card' : ''}" data-choice="${card.id}"><span class="reward-icon">${card.icon}</span><small>${escapeHtml(card.rarity)} · ${escapeHtml(card.type)}</small><b>${escapeHtml(card.title)}${mode === 'upgrade' ? ' → +' : ''}</b><p>${escapeHtml(mode === 'upgrade' && card.upgrade && card.upgrade.text ? card.upgrade.text : card.text)}</p><em>${mode === 'upgrade' ? '升级此牌的所有副本' : `${card.cost} 能量`}</em></button>`).join('')}</div>${mode === 'reward' ? '<button class="button ghost reward-skip" data-skip>跳过，明天 +1 行动力</button>' : ''}`, 'wide-modal reward-modal');
       document.querySelectorAll('[data-choice]').forEach((button) => button.addEventListener('click', () => { const choice = button.dataset.choice; closeModal(); resolve(choice); }));
       const skip = $('[data-skip]');
       if (skip) skip.addEventListener('click', () => { closeModal(); resolve(null); });
@@ -257,7 +255,7 @@
 
   function showCrisis(crisis, result) {
     const body = `<div class="crisis-result ${result.success ? 'success' : 'failure'}"><span>${crisis.icon}</span><b>${result.success ? '结构经受住了考验' : '岛屿付出了代价'}</b></div><p>${escapeHtml(result.text)}</p>${result.statusIds.length ? `<div class="status-warning">负面牌加入弃牌堆：${result.statusIds.map((id) => data.cards.find((card) => card.id === id).title).join(' × ')}</div>` : ''}<div class="guide-callout"><b>原预警：</b>${escapeHtml(crisis.intent)}<br><b>应对思路：</b>${escapeHtml(crisis.counter)}</div>`;
-    return infoModal(`${crisis.name} · ${result.success ? '成功化解' : '防御失败'}`, body, '查看下一轮');
+    return infoModal(`${crisis.name} · ${result.success ? '成功化解' : '防御失败'}`, body, '进入下一天');
   }
 
   function showMilestone(result) {

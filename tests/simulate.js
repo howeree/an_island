@@ -56,15 +56,16 @@ function longRunScenario() {
     ['sow_meadow', 5], ['restore_wetland', 0], ['native_flowers', 2], ['aquatic_plants', 0],
     ['plant_forest', 5], ['insect_hotel', 2], ['groundwater', 4], ['nest_boxes', 4]
   ];
-  for (let turn = 1; turn <= 20; turn += 1) {
+  for (let turn = 1; turn <= 100; turn += 1) {
     state.turn = turn;
+    state.day = turn;
     const action = actions[turn - 1];
     if (action) {
       const selected = card(action[0], state);
       if (eco.validTargets(state, selected).includes(action[1])) eco.playCard(state, selected, action[1]);
     }
-    eco.processRound(state, turn % 5 === 0 ? ['dry_soil'] : []);
-    if (turn % 3 === 0) eco.resolveCrisis(state, data.crises[(turn / 3 - 1) % data.crises.length]);
+    eco.processRound(state, turn % 25 === 0 ? ['dry_soil'] : []);
+    if (turn % 10 === 0) eco.resolveCrisis(state, data.crises[(turn / 10 - 1) % data.crises.length]);
     Object.values(state.stats).forEach((value) => assert(Number.isFinite(value) && value >= 0 && value <= 100));
   }
   const score = eco.finalScore(state);
