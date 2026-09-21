@@ -261,3 +261,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .action-card { min-height: 205px; }.card-art { height: 52px; }.card-art span { font-size: 1.75rem; }.recommend-ribbon { top: 32px; }.card-copy p { display: none; }.card-simple-effect { min-height: 30px; }
   .tutorial-coach { min-height: 49px; }.tutorial-coach p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.deck-status { margin-top: .2rem; }
 }
+
+/* Poker-card silhouette: a consistent 5:7 portrait rectangle on every screen. */
+.action-card { aspect-ratio: 5 / 7; min-height: 0; border-radius: 13px; }
+.action-card::before { position: absolute; z-index: 1; inset: 5px; content: ''; border: 1px solid rgba(54,126,103,.14); border-radius: 9px; pointer-events: none; }
+.status-card::before { border-color: rgba(139,79,53,.2); }
+@media (min-width: 1051px) {
+  .action-cards { grid-template-columns: repeat(5,clamp(142px,13vw,168px)); justify-content: center; }
+  .action-card { width: 100%; min-height: 0; }
+}
+@media (max-width: 1050px) {
+  .action-card { flex: 0 0 178px; width: 178px; min-height: 0; }
+  .card-art { height: 72px; }.card-art span { font-size: 2.15rem; }.recommend-ribbon { top: 48px; }
+  .card-copy { padding-top: .36rem; }.card-copy h3 { min-height: auto; font-size: .82rem; }.card-copy p { display: -webkit-box; min-height: 2.7em; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+}
+@media (max-width: 600px) {
+  .action-card { flex-basis: 172px; width: 172px; }.card-art { height: 69px; }.recommend-ribbon { top: 46px; }
+}
