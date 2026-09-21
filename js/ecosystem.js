@@ -66,9 +66,15 @@
 
   function validTargets(state, card) {
     if (!card || !card.target) return [];
+    const outputTerrainMissing = card.action === 'project' && card.terrain && terrainCount(state, card.terrain) === 0;
     return state.tiles.filter((tile) => {
       if (tile.project) return false;
-      if (card.target.terrains && !card.target.terrains.includes(tile.terrain)) return false;
+      if (card.target.terrains) {
+        const normalTarget = card.target.terrains.includes(tile.terrain);
+        const recoveryTarget = outputTerrainMissing && (card.target.recoveryTerrains || []).includes(tile.terrain);
+        if (!normalTarget && !recoveryTarget) return false;
+      }
+      if (card.action === 'project' && tile.terrain !== card.terrain && ['meadow', 'shrub', 'forest', 'wetland'].includes(tile.terrain) && terrainCount(state, tile.terrain) <= 1) return false;
       if (card.target.pollutedOnly && tile.pollution <= 0) return false;
       if (card.target.adjacent && !hasAdjacentTerrain(state, tile, card.target.adjacent)) return false;
       if (card.target.minMaturity && tile.maturity < card.target.minMaturity) return false;

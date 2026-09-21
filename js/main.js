@@ -149,6 +149,7 @@
         if (card.action === 'cleanse_tile') score = tile.stress * 12 + tile.pollution * 3;
         if (card.action === 'project') {
           score = (tile.terrain === 'barren' ? 8 : 2) - tile.pollution * 3;
+          score += eco.terrainCount(this.state, tile.terrain) * 3;
           if (card.terrain === 'forest' && nearby.some((other) => ['stream', 'wetland'].includes(other.terrain))) score += 10;
           if (card.terrain === 'meadow' && nearby.some((other) => other.terrain === 'shrub')) score += 8;
           if (card.terrain === 'shrub' && nearby.some((other) => ['meadow', 'forest'].includes(other.terrain))) score += 8;
@@ -183,7 +184,10 @@
       let targetId = null;
       if (card.target) {
         const valid = eco.validTargets(this.state, card);
-        if (!valid.length) { ui.toast('当前岛屿还不满足这张牌的生态条件。'); return; }
+        if (!valid.length) {
+          ui.toast(card.action === 'project' ? '当前没有安全的改造位置；系统不会覆盖最后一块生境。' : '当前岛屿还不满足这张牌的生态条件。');
+          return;
+        }
         targetId = this.chooseAutomaticTarget(card, valid);
       }
       await this.playInstance(uid, targetId);

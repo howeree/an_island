@@ -29,10 +29,10 @@
   ];
 
   const cards = [
-    { id: 'sow_meadow', title: '播种草甸', icon: '🌾', cost: 1, type: '工程', rarity: '基础', action: 'project', terrain: 'meadow', duration: 1, target: { terrains: ['barren'] }, text: '让一处退化区域恢复为草地。明天完工。', upgrade: { duration: 0, text: '立即形成幼年草地。' } },
-    { id: 'plant_shrubs', title: '营造灌丛', icon: '🌿', cost: 1, type: '工程', rarity: '基础', action: 'project', terrain: 'shrub', duration: 1, target: { terrains: ['barren', 'meadow'] }, text: '营造遮蔽边缘。草地改造会牺牲开阔空间。', upgrade: { cost: 0 } },
+    { id: 'sow_meadow', title: '播种草甸', icon: '🌾', cost: 1, type: '工程', rarity: '基础', action: 'project', terrain: 'meadow', duration: 1, target: { terrains: ['barren'], recoveryTerrains: ['shrub', 'forest', 'wetland'] }, text: '优先恢复退化地；草地完全消失时可应急重建。明天完工。', upgrade: { duration: 0, text: '立即形成幼年草地。' } },
+    { id: 'plant_shrubs', title: '营造灌丛', icon: '🌿', cost: 1, type: '工程', rarity: '基础', action: 'project', terrain: 'shrub', duration: 1, target: { terrains: ['barren', 'meadow'], recoveryTerrains: ['forest', 'wetland'] }, text: '营造遮蔽边缘；灌丛完全消失时可应急重建。', upgrade: { cost: 0 } },
     { id: 'restore_stream', title: '疏通溪流', icon: '〰', cost: 2, type: '工程', rarity: '基础', action: 'project', terrain: 'stream', duration: 2, target: { terrains: ['barren'] }, text: '开辟供水通道；污染也可能沿溪传播。', upgrade: { duration: 1 } },
-    { id: 'plant_forest', title: '补植本地林', icon: '🌳', cost: 2, type: '工程', rarity: '基础', action: 'project', terrain: 'forest', duration: 2, target: { terrains: ['barren', 'meadow', 'shrub'] }, text: '建立幼林。缺水时工程会停滞。', upgrade: { duration: 1 } },
+    { id: 'plant_forest', title: '补植本地林', icon: '🌳', cost: 2, type: '工程', rarity: '基础', action: 'project', terrain: 'forest', duration: 2, target: { terrains: ['barren', 'meadow', 'shrub'], recoveryTerrains: ['wetland'] }, text: '建立幼林；森林完全消失时可应急重建。缺水时工程会停滞。', upgrade: { duration: 1 } },
     { id: 'cleanup', title: '清理污染', icon: '🧤', cost: 1, type: '治理', rarity: '基础', action: 'clean', power: 2, target: { terrains: ['barren', 'meadow', 'shrub', 'forest', 'wetland', 'stream', 'coast'], pollutedOnly: true }, text: '从全岛污染最重的位置移除2层污染。', upgrade: { power: 3 } },
     { id: 'native_flowers', title: '本地花带', icon: '🌼', cost: 1, type: '营造', rarity: '基础', action: 'trait', trait: 'flowers', target: { terrains: ['meadow'] }, text: '草地获得「花带」；靠近灌丛时形成传粉网络。', upgrade: { cost: 0 } },
     { id: 'field_survey', title: '野外调查', icon: '🔎', cost: 1, type: '技能', rarity: '基础', action: 'draw', draw: 2, text: '抽2张牌，查看今天更多可能。', upgrade: { draw: 3 } },
@@ -40,7 +40,7 @@
     { id: 'habitat_plan', title: '协同规划', icon: '🗺️', cost: 0, type: '技能', rarity: '基础', action: 'focus', draw: 1, energy: 1, exhaust: true, text: '获得1能量并抽1张牌；本局移除。', upgrade: { draw: 2 } },
     { id: 'compost', title: '生态堆肥', icon: '♻', cost: 1, type: '治理', rarity: '基础', action: 'purge', text: '从弃牌堆中永久移除1张负面牌；没有时获得1能量。', upgrade: { cost: 0 } },
 
-    { id: 'restore_wetland', title: '恢复湿地', icon: '🪷', cost: 2, type: '工程', rarity: '进阶', unlockTurn: 10, action: 'project', terrain: 'wetland', duration: 2, target: { terrains: ['barren', 'meadow'], adjacent: ['stream'] }, text: '只能建在溪流旁。可吸收洪峰并孕育两栖类。', upgrade: { duration: 1 } },
+    { id: 'restore_wetland', title: '恢复湿地', icon: '🪷', cost: 2, type: '工程', rarity: '进阶', unlockTurn: 10, action: 'project', terrain: 'wetland', duration: 2, target: { terrains: ['barren', 'meadow'], recoveryTerrains: ['shrub', 'forest'], adjacent: ['stream'] }, text: '只能建在溪流旁。可吸收洪峰并孕育两栖类。', upgrade: { duration: 1 } },
     { id: 'aquatic_plants', title: '种植水草', icon: '🌱', cost: 1, type: '营造', rarity: '进阶', unlockTurn: 10, action: 'trait', trait: 'aquatic', target: { terrains: ['wetland'] }, text: '湿地获得「水草」，与相邻溪流组成湿地复苏结构。', upgrade: { cost: 0 } },
     { id: 'insect_hotel', title: '昆虫旅馆', icon: '🪵', cost: 1, type: '营造', rarity: '进阶', unlockTurn: 10, action: 'trait', trait: 'insect_hotel', target: { terrains: ['meadow', 'shrub'] }, text: '提供越冬空间，缓冲恶劣天气对传粉者的影响。', upgrade: { cost: 0 } },
     { id: 'nest_boxes', title: '设置巢箱', icon: '🪺', cost: 1, type: '营造', rarity: '进阶', unlockTurn: 15, action: 'trait', trait: 'nest_boxes', target: { terrains: ['forest', 'shrub'] }, text: '补足鸟类巢位；成熟森林中的收益更高。', upgrade: { cost: 0 } },
