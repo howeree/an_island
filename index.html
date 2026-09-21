@@ -1,105 +1,49 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0c7db7" />
-  <title>一座岛的100天 · 100 Days of Biodiversity</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#edf3e9">
+  <title>一座岛的100天 · 复苏远征</title>
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-  <div class="sky-glow glow-one"></div>
-  <div class="sky-glow glow-two"></div>
   <main id="app">
-    <section id="start-screen" class="start-screen screen">
-      <div class="start-copy">
-        <p class="eyebrow">100 DAYS OF BIODIVERSITY</p>
-        <h1>一座岛的<br><em>100天</em></h1>
-        <p class="tagline">让生命重新回到这座岛。</p>
-        <p class="start-intro">每天拖动卡牌恢复岛屿，花费行动力，再结束今天。保护它平安度过100天。</p>
-        <div class="start-actions">
-          <button class="button primary large" data-action="start">开始恢复生态 <span>→</span></button>
-          <button class="button ghost" data-action="open-codex">生态图鉴</button>
-          <button class="text-button" data-action="open-guide">游戏说明</button>
-        </div>
+    <section id="start-screen" class="screen start-screen">
+      <div class="start-copy"><p class="eyebrow">ISLAND / THE RECOVERY EXPEDITION</p>
+        <h1>一座岛的100天<span>复苏远征</span></h1>
+        <p class="tagline">用一手好牌，让岛屿活下来。</p>
+        <p class="start-intro">全新 30 天标准局 · 三阶段生态挑战<br>建设会持续回报，连携能扭转局面。每一天，都在为下一场风暴做准备。</p>
+        <div class="start-actions"><button class="button primary" data-action="continue" hidden>继续远征</button><button class="button primary" data-action="start">开始新远征 →</button><button class="button" data-action="guide">玩法说明</button></div>
+        <p class="start-note">每日自动存档 · 一次结束只前进一天 · 拖牌即可使用</p>
       </div>
-      <div class="cover-art" aria-label="一座正在复苏的卡通岛屿">
-        <div class="cover-sun"></div><div class="cover-cloud cloud-a"></div><div class="cover-cloud cloud-b"></div>
-        <div class="cover-sea"></div><div class="cover-island"></div>
-        <span class="cover-tree tree-one">🌳</span><span class="cover-tree tree-two">🌲</span>
-        <span class="cover-flower">🌼</span><span class="cover-bee">🐝</span><span class="cover-bird">🐦</span>
-        <span class="cover-wave wave-a">⌇</span><span class="cover-wave wave-b">⌇</span>
-        <p class="cover-caption">从一株野花开始</p>
-      </div>
+      <div class="cover-art"><span class="cover-sun">☀</span><div class="cover-land"></div><div class="cover-trees">🌲 🌳 🌲</div><div class="cover-life">🌾 🦊 🌼</div><span class="cover-water">🪷</span><p>雨水 → 花草 → 森林 → 雨水</p></div>
     </section>
-
-    <section id="game-screen" class="game-screen screen hidden" aria-live="polite">
-      <header class="game-header">
-        <button class="brand" data-action="show-guide" title="查看游戏说明"><span>◒</span> 一座岛的100天</button>
-        <div class="day-meter">
-          <span id="day-label">第 1 / 100 天</span>
-          <div class="progress-track"><i id="day-progress"></i></div>
-        </div>
-        <div class="header-tools">
-          <button class="round-button" data-action="open-codex" title="生态图鉴" aria-label="生态图鉴">▤</button>
-          <button class="round-button" data-action="open-network" title="生态网络" aria-label="生态网络">⌘</button>
-          <button class="round-button subtle" data-action="restart" title="重新开始" aria-label="重新开始">↻</button>
-        </div>
-      </header>
-
-      <section class="metric-strip" aria-label="核心生态指标">
-        <article class="metric-card biodiversity"><span class="metric-icon">✦</span><div><small>生物多样性</small><strong id="metric-biodiversity">9</strong></div></article>
-        <article class="metric-card stability"><span class="metric-icon">◌</span><div><small>生态稳定性</small><strong id="metric-stability">28</strong></div></article>
-        <article class="metric-card habitat"><span class="metric-icon">⌂</span><div><small>栖息地完整度</small><strong id="metric-habitat">16</strong></div></article>
-        <article class="metric-card chain"><span class="metric-icon">↝</span><div><small>食物链</small><strong id="metric-food-chain">3</strong></div></article>
+    <section id="game-screen" class="screen hidden">
+      <header class="game-header"><div><span class="eyebrow">ISLAND / 03</span><h1>复苏远征</h1></div><div class="day-meter"><strong id="day-label"></strong><small id="act-label"></small><div class="progress-track"><i id="day-progress"></i></div></div><nav><button class="button small" data-action="deck">牌组</button><button class="button small" data-action="guide">规则</button><button class="button small" data-action="restart">重开</button></nav></header>
+      <section class="metric-strip" aria-label="远征资源">
+        <article><span>♥</span><div><small>岛屿生命</small><strong id="hp-value"></strong></div><i id="hp-fill"></i></article>
+        <article><span>🛡</span><div><small>临时护盾 · 今晚消耗</small><strong id="block-value"></strong></div></article>
+        <article><span>🌱</span><div><small>种子 · 建设消耗2</small><strong id="seeds-value"></strong></div></article>
+        <article><span>✦</span><div><small>研究 · 胜利需要24</small><strong id="research-value"></strong></div></article>
       </section>
-
-      <section id="forecast-strip" class="forecast-strip" aria-label="未来生态危机"></section>
-
-      <section class="island-layout">
-        <div class="island-panel">
-          <div class="island-toolbar"><span id="stage-label" class="stage-pill">恢复初期</span><span id="scene-caption">荒岛正在等待第一株新芽。</span></div>
-          <div id="island-world" class="island-world" role="img" aria-label="岛屿生态景观"></div>
-          <div id="island-legend" class="island-legend"></div>
-        </div>
-        <aside class="ecosystem-sidebar">
-          <section class="sidebar-card habitat-card">
-            <div class="card-heading"><div><p class="kicker">生态体征</p><h2>栖息地状态</h2></div><span>实时</span></div>
-            <div id="habitat-bars" class="habitat-bars"></div>
-          </section>
-          <section id="strategy-card" class="sidebar-card strategy-card"></section>
-          <section id="insight-card" class="sidebar-card insight-card"></section>
-          <section class="sidebar-card mini-guide">
-            <span class="mini-guide-icon">✣</span><p>均衡比堆高单一物种更重要。点击 <b>生态网络</b> 随时查看关系。</p>
-          </section>
-        </aside>
-      </section>
-
-      <section class="actions-section">
-        <div class="action-heading">
-          <div><p class="kicker">你现在要做的事</p><h2>把一张牌向上拖动并松手</h2></div>
-          <div class="turn-controls">
-            <div class="energy-wrap"><small>今日行动力</small><div class="energy-orb" title="每天恢复；每张牌左上角写着消耗"><span>⚡</span><strong id="energy-current">3</strong><small>/ <b id="energy-max">3</b></small></div></div>
-            <button id="end-day-button" class="end-day-button" data-action="end-day">结束今天 <span>→</span></button>
-          </div>
-        </div>
-        <div id="tutorial-coach" class="tutorial-coach" aria-live="polite"></div>
-        <div id="play-drop-zone" class="play-drop-zone"><span>↑</span><b>松手使用卡牌</b></div>
-        <div id="combo-banner" class="combo-banner" aria-live="polite"></div>
+      <div class="board-layout">
+        <section class="island-panel"><div class="panel-heading"><strong>一座持续生长的岛</strong><small>生境独立成长 · 不会相互覆盖</small></div><div id="island-world" class="island-world" role="img" aria-label="生态岛屿"></div><div id="habitat-bars" class="habitat-bars"></div></section>
+        <section class="planning-panel"><div class="panel-heading"><strong>今晚的挑战</strong><small>每天结束时结算</small></div><div id="forecast-strip"></div><div id="defense-preview"></div><div id="objective-strip"></div></section>
+      </div>
+      <section class="actions-section"><div class="action-heading"><div><strong>你的手牌</strong><small>向上拖动 72 像素后松手 · 每晚最多保留1张</small></div><div class="turn-controls"><span class="energy-orb">⚡ <b id="energy-value"></b></span><button class="button small" data-action="guard" id="guard-button" title="无需卡牌，1行动力换3护盾">巡护 · 1⚡</button><button class="button small" data-action="swap" id="swap-button" title="每天一次，保留的卡牌不会被换掉">换牌 · 1⚡</button><button class="button primary" data-action="end-day" id="end-day-button">结束今天 →</button></div></div>
+        <div id="combo-strip" class="combo-strip"></div>
         <div id="action-cards" class="action-cards"></div>
-        <div class="deck-status"><span>▰ 抽牌堆 <b id="draw-count">0</b></span><span>▱ 弃牌堆 <b id="discard-count">0</b></span><span>每次出牌消耗生态能量；结束今天后推进工程并结算危机</span></div>
+        <footer class="hand-footer"><span id="deck-counts"></span><span id="daily-hint"></span></footer>
       </section>
+      <div id="last-log" class="last-log" role="status"></div>
     </section>
-
-    <section id="results-screen" class="results-screen screen hidden"></section>
+    <section id="results-screen" class="screen hidden"></section>
   </main>
-  <div id="modal-root" class="modal-root" aria-live="assertive"></div>
+  <div id="play-drop-zone" class="play-drop-zone">↑ 继续向上拖动</div>
+  <div id="combo-banner" class="combo-banner" role="status">生态连携 · 护盾与研究提升</div>
+  <div id="modal-root" class="modal-root"></div>
   <div id="toast" class="toast" role="status"></div>
-
-  <script src="js/data.js" defer></script>
-  <script src="js/ecosystem.js" defer></script>
-  <script src="js/audio.js" defer></script>
-  <script src="js/ui.js" defer></script>
-  <script src="js/main.js" defer></script>
+  <script src="js/data.js?v=3" defer></script><script src="js/ecosystem.js?v=3" defer></script><script src="js/audio.js" defer></script><script src="js/ui.js?v=3" defer></script><script src="js/main.js?v=3" defer></script>
 </body>
 </html>
