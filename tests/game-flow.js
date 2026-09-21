@@ -36,10 +36,8 @@ const assert = require('node:assert/strict');
   Game.state.deck.hand.push(targetInstance);
   Game.state.energy.current = 9;
   await Game.selectCard(targetInstance.uid);
-  assert.equal(Game.pendingCardUid, targetInstance.uid);
-  const targetId = Ecosystem.validTargets(Game.state, Game.getInstanceCard(targetInstance.uid))[0];
-  await Game.selectTile(targetId);
-  assert(Game.state.tiles[targetId].project);
+  assert.equal(Game.pendingCardUid, undefined);
+  assert(Game.state.tiles.some((tile) => tile.project && tile.project.cardId === 'sow_meadow'));
 
   for (let completed = 0; completed < 20; completed += 1) await Game.endRound();
   assert.equal(resultsShown, true);

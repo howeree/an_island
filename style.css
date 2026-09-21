@@ -125,6 +125,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .playing-card .card-reason { font-size: 10.5px; }
 }
 
+/* Unified island view: the simulation keeps ecological capacity internally,
+   while the player sees and operates one continuous landscape. */
+.island-world.unified-world { height: 415px; overflow: hidden; background: radial-gradient(ellipse at 50% 46%, rgba(225,251,239,.48), transparent 47%), linear-gradient(160deg, #a5e7ef, #43b5d3); }
+.unified-island { position: absolute; z-index: 2; width: 80%; height: 78%; bottom: 5%; left: 10%; border: 10px solid #e8c174; border-radius: 48% 52% 43% 49% / 48% 41% 59% 52%; background: radial-gradient(ellipse at 32% 32%, rgba(226,242,149,.8) 0 11%, transparent 12%), radial-gradient(ellipse at 67% 63%, rgba(51,139,82,.23) 0 18%, transparent 19%), linear-gradient(145deg, #a8d66e, #5eaf63 70%, #47965a); box-shadow: inset 0 -15px 0 rgba(105,93,39,.09), 0 16px 10px rgba(0,91,123,.2); }
+.unified-island::before { position: absolute; inset: 5%; content: ''; border: 1px solid rgba(255,255,255,.25); border-radius: inherit; pointer-events: none; }
+.unified-island::after { position: absolute; z-index: -1; width: 26%; height: 13%; right: -5%; bottom: 2%; content: ''; border-radius: 50%; background: #edd09a; opacity: .88; }
+.unified-stream { position: absolute; z-index: 1; top: 12%; left: 47%; color: #7de0ec; font-size: clamp(4rem, 8vw, 7rem); font-weight: 950; line-height: 1; text-shadow: 2px 2px #4faac2; transform: rotate(57deg) scaleY(1.7); opacity: .9; }
+.unified-wetland { position: absolute; z-index: 2; right: 16%; bottom: 14%; display: grid; width: 18%; height: 18%; place-items: center; border: 5px solid rgba(63,145,75,.75); border-radius: 48% 52% 43% 57%; background: #67cbd9; box-shadow: inset 0 6px 0 rgba(255,255,255,.18); font-size: 1.4rem; }
+.unified-token { position: absolute; z-index: 4; left: var(--x); top: var(--y); display: inline-block; line-height: 1; transform: translate(-50%,-50%); transform-origin: 50% 100%; user-select: none; pointer-events: none; filter: drop-shadow(0 3px 2px rgba(31,79,53,.16)); }
+.terrain-token { animation: unified-sway 3.2s ease-in-out infinite alternate; animation-delay: var(--delay); }.terrain-token.terrain-forest { font-size: clamp(2.25rem, 4.2vw, 3.8rem); }.terrain-token.terrain-shrub { font-size: clamp(1.45rem, 2.7vw, 2.3rem); }.terrain-token.terrain-meadow { font-size: clamp(1.2rem, 2.3vw, 1.9rem); }
+.trait-token { z-index: 5; font-size: clamp(.9rem, 1.8vw, 1.35rem); }.creature-token { z-index: 7; font-size: clamp(1.15rem, 2.2vw, 1.8rem); animation: unified-bob 2.4s ease-in-out infinite; animation-delay: var(--delay); }
+.unified-projects { position: absolute; z-index: 12; bottom: 5%; left: 50%; display: flex; width: 80%; flex-wrap: wrap; justify-content: center; gap: .3rem; transform: translateX(-50%); }.unified-projects span { padding: .28rem .46rem; border: 1px solid rgba(255,255,255,.45); border-radius: 8px; color: white; background: rgba(24,76,64,.78); font-size: .53rem; font-weight: 900; box-shadow: 0 3px 8px rgba(24,65,58,.15); }.unified-projects i { display: inline-block; width: 7px; height: 7px; margin-right: .2rem; border: 1px solid white; border-top-color: transparent; border-radius: 50%; animation: energy-spin 1.2s linear infinite; }
+.unified-alerts { position: absolute; z-index: 13; top: 6%; right: 5%; display: flex; gap: .3rem; }.unified-alerts span { padding: .26rem .42rem; border-radius: 99px; color: #fff; font-size: .52rem; font-weight: 950; box-shadow: 0 3px 8px rgba(55,51,47,.16); }.unified-alerts .pollution { background: #74546f; }.unified-alerts .stress { background: #c56842; }
+@keyframes unified-sway { from { transform: translate(-50%,-50%) rotate(-2deg); } to { transform: translate(-50%,-53%) rotate(2deg); } }
+@keyframes unified-bob { 50% { transform: translate(-50%,-62%); } }
+@media (max-width: 600px) {
+  .island-world.unified-world { height: 300px; overflow: hidden; }
+  .unified-island { width: 92%; height: 76%; left: 4%; border-width: 7px; }
+  .unified-projects { width: 92%; }.unified-projects span { font-size: .47rem; }
+  .unified-alerts { top: 4%; right: 3%; flex-direction: column; }.unified-alerts span { font-size: .47rem; }
+}
+
 /* Upward drag-to-play interaction */
 .action-card.playing-card { touch-action: pan-x; user-select: none; -webkit-user-select: none; }
 .card-drag-placeholder { display: block; flex: 0 0 auto; border-radius: 15px; opacity: 0; pointer-events: none; }

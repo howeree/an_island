@@ -18,7 +18,6 @@
   const Game = {
     state: null,
     busy: false,
-    pendingCardUid: null,
     uidCounter: 0,
 
     makeInstance(cardId) { this.uidCounter += 1; return { uid: `card-${this.uidCounter}`, cardId }; },
@@ -80,7 +79,6 @@
 
     startNew(showTutorial) {
       this.busy = false;
-      this.pendingCardUid = null;
       this.uidCounter = 0;
       this.state = eco.createInitialState();
       this.setupDeck();
@@ -90,11 +88,38 @@
       if (showTutorial) ui.openGuide();
     },
 
-    cancelTarget(showToast) {
-      if (!this.pendingCardUid) return;
-      this.pendingCardUid = null;
-      ui.render(this.state, this);
-      if (showToast) ui.toast('已取消选址，能量没有消耗。');
+    chooseAutomaticTarget(card, validIds) {
+      const scored = validIds.map((id) => {
+        const tile = eco.tileById(this.state, id);
+        const nearby = eco.neighbors(this.state, id);
+        let score = tile.maturity * 2 - tile.pollution * 2 - tile.stress;
+        if (card.action === 'clean') score = tile.pollution * 12 + tile.stress * 2;
+        if (card.action === 'cleanse_tile') score = tile.stress * 12 + tile.pollution * 3;
+        if (card.action === 'project') {
+          score = (tile.terrain === 'barren' ? 8 : 2) - tile.pollution * 3;
+          if (card.terrain === 'forest' && nearby.some((other) => ['stream', 'wetland'].includes(other.terrain))) score += 10;
+          if (card.terrain === 'meadow' && nearby.some((other) => other.terrain === 'shrub')) score += 8;
+          if (card.terrain === 'shrub' && nearby.some((other) => ['meadow', 'forest'].includes(other.terrain))) score += 8;
+          if (card.terrain === 'wetland' && nearby.some((other) => other.terrain === 'stream')) score += 14;
+        }
+        if (card.action === 'trait') {
+          if (card.trait === 'flowers' && nearby.some((other) => other.terrain === 'shrub')) score += 14;
+          if (card.trait === 'aquatic' && nearby.some((other) => other.terrain === 'stream')) score += 14;
+          if (card.trait === 'insect_hotel' && (tile.traits.includes('flowers') || nearby.some((other) => other.traits.includes('flowers')))) score += 12;
+          if (card.trait === 'nest_boxes' && tile.terrain === 'forest') score += tile.maturity * 5;
+          if (card.trait === 'corridor') score += new Set(nearby.map((other) => other.terrain)).size * 5;
+          if (card.trait === 'frog_pond' && tile.traits.includes('aquatic')) score += 15;
+          if (card.trait === 'old_tree') score += tile.maturity * 6;
+          if (card.trait === 'water_storage') score += tile.stress * 4 + (tile.terrain === 'forest' ? 5 : 0);
+        }
+        if (card.action === 'introduce') {
+          score += tile.maturity * 5;
+          if (card.species === 'fox' && (tile.traits.includes('corridor') || nearby.some((other) => other.traits.includes('corridor')))) score += 15;
+        }
+        return { id, score };
+      });
+      scored.sort((a, b) => b.score - a.score || a.id - b.id);
+      return scored[0].id;
     },
 
     async selectCard(uid) {
@@ -103,29 +128,13 @@
       if (!instance) return;
       const card = eco.getCard(instance.cardId, this.state);
       if (this.state.energy.current < card.cost) { ui.toast(`能量不足：${card.title}需要 ${card.cost} 点。`); return; }
+      let targetId = null;
       if (card.target) {
         const valid = eco.validTargets(this.state, card);
-        if (!valid.length) { ui.toast('当前没有满足条件的地块。查看牌面与地块相邻关系。'); return; }
-        this.pendingCardUid = uid;
-        ui.render(this.state, this);
-        ui.toast(`请选择一个发光地块使用「${card.title}」。`);
-        audio.click();
-        return;
+        if (!valid.length) { ui.toast('当前岛屿还不满足这张牌的生态条件。'); return; }
+        targetId = this.chooseAutomaticTarget(card, valid);
       }
-      await this.playInstance(uid, null);
-    },
-
-    async selectTile(tileId) {
-      if (this.busy || !this.state) return;
-      if (!this.pendingCardUid) { ui.showTileDetails(this.state, tileId); return; }
-      const card = this.getInstanceCard(this.pendingCardUid);
-      if (!card || !eco.validTargets(this.state, card).includes(Number(tileId))) {
-        ui.toast('这块地不满足卡牌条件，请选择发光地块。');
-        return;
-      }
-      const uid = this.pendingCardUid;
-      this.pendingCardUid = null;
-      await this.playInstance(uid, Number(tileId));
+      await this.playInstance(uid, targetId);
     },
 
     removeStatusFromDiscard(preferredId) {
@@ -229,7 +238,6 @@
     async endRound() {
       if (this.busy || !this.state) return;
       this.busy = true;
-      this.pendingCardUid = null;
       const heldStatusIds = this.state.deck.hand.map((instance) => eco.getCard(instance.cardId, this.state)).filter((card) => card.type === '负面').map((card) => card.id);
       this.state.deck.discardPile.push(...this.state.deck.hand);
       this.state.deck.hand = [];
@@ -289,12 +297,9 @@
       if (name === 'open-network') ui.openNetwork(Game.state);
       if (name === 'open-guide' || name === 'show-guide') ui.openGuide();
       if (name === 'end-day') Game.endRound();
-      if (name === 'cancel-target') Game.cancelTarget(true);
       if (name === 'restart' && Game.state && window.confirm('放弃当前岛屿并重新开始吗？')) Game.startNew(false);
       return;
     }
-    const tile = event.target.closest('[data-tile-id]');
-    if (tile && Game.state) { Game.selectTile(Number(tile.dataset.tileId)); return; }
     const card = event.target.closest('[data-card-uid]');
     if (card && Date.now() >= suppressCardClickUntil && !card.classList.contains('dragging-card')) ui.toast('请把卡牌向上拖动并松手使用。');
   });
@@ -305,7 +310,6 @@
       event.preventDefault();
       Game.selectCard(card.dataset.cardUid);
     }
-    if (event.key === 'Escape' && Game.pendingCardUid) Game.cancelTarget(false);
   });
 
   let drag = null;

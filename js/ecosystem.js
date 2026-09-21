@@ -37,7 +37,7 @@
       forecasts: [],
       milestones: { records: [] },
       history: [],
-      lastLog: { icon: '◒', title: '退化岛屿等待规划', text: '土地只有七块。观察危机预警，再决定每块地的长期用途。' }
+      lastLog: { icon: '◒', title: '退化岛屿等待规划', text: '岛屿空间有限。观察危机预警，再决定优先恢复哪一种生态功能。' }
     };
     derive(state);
     return state;
@@ -109,7 +109,7 @@
     } else if (card.action === 'cleanse_tile' && tile) {
       tile.stress = 0;
       tile.pollution = Math.max(0, tile.pollution - 1);
-      text = '地块压力已清除，入侵藤蔓不再蔓延。';
+      text = '局部生态压力已清除，入侵藤蔓不再蔓延。';
     } else if (card.action === 'policy') {
       const existed = state.policies[card.policy];
       state.policies[card.policy] = true;
@@ -233,7 +233,7 @@
     }
     if (state.turn % 4 === 0 && state.policies.seed_bank) {
       const barren = state.tiles.find((tile) => tile.terrain === 'barren' && tile.pollution > 0);
-      if (barren) { barren.pollution -= 1; logs.push('种子库志愿者净化了一块退化地'); }
+      if (barren) { barren.pollution -= 1; logs.push('种子库志愿者净化了一处退化区域'); }
     }
     state.tiles.forEach((tile) => {
       if (tile.stress > 0 && Math.random() < 0.25) tile.stress -= 1;
