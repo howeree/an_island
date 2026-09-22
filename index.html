@@ -4,34 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#edf3e9">
-  <title>一座岛的100天 · 复苏远征</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <title>一座岛的30天</title>
+  <link rel="stylesheet" href="style.css?v=4.6">
 </head>
 <body>
   <main id="app">
     <section id="start-screen" class="screen start-screen">
       <div class="start-copy"><p class="eyebrow">ISLAND / THE RECOVERY EXPEDITION</p>
-        <h1>一座岛的100天<span>复苏远征</span></h1>
+        <h1>一座岛的30天<span>复苏远征</span></h1>
         <p class="tagline">用一手好牌，让岛屿活下来。</p>
-        <p class="start-intro">全新 30 天标准局 · 三阶段生态挑战<br>建设会持续回报，连携能扭转局面。每一天，都在为下一场风暴做准备。</p>
+        <p class="start-intro">30 天生态策略牌局 · 三项研究课题<br>管理水分和生态压力，引入物种、建设设施，应对连续天气。</p>
         <div class="start-actions"><button class="button primary" data-action="continue" hidden>继续远征</button><button class="button primary" data-action="start">开始新远征 →</button><button class="button" data-action="guide">玩法说明</button></div>
         <p class="start-note">每日自动存档 · 一次结束只前进一天 · 拖牌即可使用</p>
       </div>
       <div class="cover-art"><span class="cover-sun">☀</span><div class="cover-land"></div><div class="cover-trees">🌲 🌳 🌲</div><div class="cover-life">🌾 🦊 🌼</div><span class="cover-water">🪷</span><p>雨水 → 花草 → 森林 → 雨水</p></div>
     </section>
     <section id="game-screen" class="screen hidden">
-      <header class="game-header"><div><span class="eyebrow">ISLAND / 03</span><h1>复苏远征</h1></div><div class="day-meter"><strong id="day-label"></strong><small id="act-label"></small><div class="progress-track"><i id="day-progress"></i></div></div><nav><button class="button small" data-action="deck">牌组</button><button class="button small" data-action="guide">规则</button><button class="button small" data-action="restart">重开</button></nav></header>
+      <header class="game-header"><div><span class="eyebrow">ISLAND / 03</span><h1>一座岛的30天</h1></div><div class="day-meter"><strong id="day-label"></strong><small id="act-label"></small><div class="progress-track"><i id="day-progress"></i></div></div><nav><button class="button small" data-action="deck">牌组</button><button class="button small" data-action="guide">规则</button><button class="button small" data-action="restart">重开</button></nav></header>
       <section class="metric-strip" aria-label="远征资源">
         <article><span>♥</span><div><small>岛屿生命</small><strong id="hp-value"></strong></div><i id="hp-fill"></i></article>
         <article><span>🛡</span><div><small>临时护盾 · 今晚消耗</small><strong id="block-value"></strong></div></article>
         <article><span>🌱</span><div><small>种子 · 建设消耗2</small><strong id="seeds-value"></strong></div></article>
-        <article><span>✦</span><div><small>研究 · 胜利需要24</small><strong id="research-value"></strong></div></article>
+        <article><span>✦</span><div><small>研究点 · 用于课题</small><strong id="research-value"></strong></div></article>
+        <article><span>💧</span><div><small>水分 · 建设水林消耗</small><strong id="moisture-value"></strong></div></article>
+        <article><span>♨</span><div><small>生态压力 · 高压有代价</small><strong id="pressure-value"></strong></div></article>
       </section>
       <div class="board-layout">
-        <section class="island-panel"><div class="panel-heading"><strong>一座持续生长的岛</strong><small>生境独立成长 · 不会相互覆盖</small></div><div id="island-world" class="island-world" role="img" aria-label="生态岛屿"></div><div id="habitat-bars" class="habitat-bars"></div></section>
-        <section class="planning-panel"><div class="panel-heading"><strong>今晚的挑战</strong><small>每天结束时结算</small></div><div id="forecast-strip"></div><div id="defense-preview"></div><div id="objective-strip"></div></section>
+        <section class="island-panel"><div class="panel-heading"><strong>一座持续生长的岛</strong><button class="button small" data-action="systems">物种与设施</button></div><div id="island-world" class="island-world" role="img" aria-label="生态岛屿"></div><div id="habitat-bars" class="habitat-bars"></div><div id="system-strip"></div></section>
+        <section class="planning-panel"><div class="panel-heading"><strong>今晚的挑战</strong><small>每天结束时结算</small></div><div id="weather-strip"></div><div id="forecast-strip"></div><div id="defense-preview"></div><div id="objective-strip"></div><div class="planning-tools"><button class="button small" data-action="topics">查看 / 完成生态课题</button><button class="button small" data-action="mitigate" id="mitigate-button">使用预警 · 冲击−3</button><span id="forecast-token"></span></div></section>
       </div>
-      <section class="actions-section"><div class="action-heading"><div><strong>你的手牌</strong><small>向上拖动 72 像素后松手 · 每晚最多保留1张</small></div><div class="turn-controls"><span class="energy-orb">⚡ <b id="energy-value"></b></span><button class="button small" data-action="guard" id="guard-button" title="无需卡牌，1行动力换3护盾">巡护 · 1⚡</button><button class="button small" data-action="swap" id="swap-button" title="每天一次，保留的卡牌不会被换掉">换牌 · 1⚡</button><button class="button primary" data-action="end-day" id="end-day-button">结束今天 →</button></div></div>
+      <section class="actions-section"><div class="action-heading"><div><strong>你的手牌</strong><small>向上拖动 72 像素后松手 · 每晚最多保留1张</small></div><div class="turn-controls"><span class="energy-orb">⚡ <b id="energy-value"></b></span><button class="button small" data-action="guard" id="guard-button" title="无需卡牌，1行动力换3护盾">巡护 · 1⚡</button><button class="button small" data-action="swap" id="swap-button" title="每天最多两次：首次免费，第二次花1行动力；保留的牌不会被换掉">免费换牌 · 1/2</button><button class="button primary" data-action="end-day" id="end-day-button">结束今天 →</button></div></div>
         <div id="combo-strip" class="combo-strip"></div>
         <div id="action-cards" class="action-cards"></div>
         <footer class="hand-footer"><span id="deck-counts"></span><span id="daily-hint"></span></footer>
@@ -43,7 +45,12 @@
   <div id="play-drop-zone" class="play-drop-zone">↑ 继续向上拖动</div>
   <div id="combo-banner" class="combo-banner" role="status">生态连携 · 护盾与研究提升</div>
   <div id="modal-root" class="modal-root"></div>
+  <div id="tutorial-overlay" class="tutorial-overlay" role="dialog" aria-label="新手引导" aria-modal="true" aria-hidden="true" tabindex="0">
+    <div id="tutorial-spotlight" class="tutorial-spotlight" aria-hidden="true"></div>
+    <div id="tutorial-panel" class="tutorial-panel" aria-live="polite"></div>
+    <button id="tutorial-skip" class="button tutorial-skip" type="button">跳过引导 ×</button>
+  </div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="js/data.js?v=3" defer></script><script src="js/ecosystem.js?v=3" defer></script><script src="js/audio.js" defer></script><script src="js/ui.js?v=3" defer></script><script src="js/main.js?v=3" defer></script>
+  <script src="js/data.js?v=4.6" defer></script><script src="js/ecosystem.js?v=4.6" defer></script><script src="js/audio.js" defer></script><script src="js/ui.js?v=4.6" defer></script><script src="js/main.js?v=4.6" defer></script>
 </body>
 </html>

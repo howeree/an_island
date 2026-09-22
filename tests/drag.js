@@ -32,4 +32,8 @@ c=card();handlers.pointerdown(event(c,110,450));handlers.pointermove(event(c,110
 assert.equal(used.length,0);
 c=card();handlers.pointerdown(event(c,110,450));handlers.pointermove(event(c,110,365));handlers.pointerup(event(c,110,365));
 assert.deepEqual(used,['test-card']);assert.equal(c.parentNode,parent);
+c=card(); c.inlineStyle='--fan-angle:-4.4deg;--fan-drop:10px';
+c.getAttribute=()=>c.inlineStyle; c.setAttribute=(_,value)=>{c.inlineStyle=value;};
+handlers.pointerdown(event(c,110,450));handlers.pointermove(event(c,135,360));handlers.pointercancel(event(c,135,360));
+assert.equal(c.inlineStyle,'--fan-angle:-4.4deg;--fan-drop:10px','Cancelled drag restores fan position');
 console.log('Drag OK: cursor anchor, short drag, cancellation, release, and DOM restoration.');
