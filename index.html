@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#edf3e9">
   <title>一座岛的30天</title>
-  <link rel="stylesheet" href="style.css?v=5.2">
+  <link rel="stylesheet" href="style.css?v=5.3">
 </head>
 <body>
   <main id="app">
@@ -31,7 +31,7 @@
       </section>
       <div class="board-layout">
         <section class="island-panel"><div class="panel-heading"><strong>一座持续生长的岛</strong><button class="button small" data-action="systems">物种与设施</button></div><div id="island-world" class="island-world" role="img" aria-label="生态岛屿"></div><div id="habitat-bars" class="habitat-bars"></div><div id="system-strip"></div></section>
-        <section class="planning-panel"><div class="panel-heading"><strong>今晚的挑战</strong><small>每天结束时结算</small></div><div id="weather-strip"></div><div id="forecast-strip"></div><div id="defense-preview"></div><div id="objective-strip"></div><div class="planning-tools"><button class="button small" data-action="topics">查看 / 完成生态课题</button><button class="button small" data-action="mitigate" id="mitigate-button">使用预警 · 冲击−3</button><span id="forecast-token"></span></div></section>
+        <section class="planning-panel"><div class="panel-heading"><strong>今晚的挑战</strong><small>每天结束时结算</small></div><div id="weather-strip"></div><div id="forecast-strip"></div><div id="defense-preview"></div><div id="objective-strip"></div><div class="planning-tools"><button class="button small" data-action="topics" id="topics-button">查看 / 完成生态课题</button><button class="button small" data-action="mitigate" id="mitigate-button">使用预警 · 冲击−3</button><span id="forecast-token"></span></div></section>
       </div>
       <section class="actions-section"><div class="action-heading"><div><strong>你的手牌</strong><small>向上拖动使用 · 拖到右侧牌库免费换1张</small></div><div class="turn-controls"><span class="energy-orb">⚡ <b id="energy-value"></b></span><button class="button small" data-action="guard" id="guard-button" title="无需卡牌，1行动力换3护盾">巡护 · 1⚡</button><button class="button small" data-action="swap" id="swap-button" title="每天最多两次，每次花1行动力；保留的牌不会被换掉">整手换牌 · 1⚡ · 1/2</button><button class="button primary" data-action="end-day" id="end-day-button">结束今天 →</button></div></div>
         <div id="combo-strip" class="combo-strip"></div>
@@ -51,6 +51,6 @@
     <button id="tutorial-skip" class="button tutorial-skip" type="button">跳过引导 ×</button>
   </div>
   <div id="toast" class="toast" role="status"></div>
-  <script src="js/data.js?v=4.6" defer></script><script src="js/ecosystem.js?v=5.0" defer></script><script src="js/audio.js" defer></script><script src="js/ui.js?v=5.0" defer></script><script src="js/main.js?v=5.0" defer></script>
+  <script src="js/data.js?v=4.6" defer></script><script src="js/ecosystem.js?v=5.0" defer></script><script src="js/audio.js" defer></script><script src="js/ui.js?v=5.1" defer></script><script src="js/main.js?v=5.0" defer></script>
 </body>
 </html>

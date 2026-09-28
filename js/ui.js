@@ -130,7 +130,10 @@
     const boss = s.forecasts.find(t => t.boss && t.day >= s.day);
     $('#objective-strip').innerHTML = '<strong>第30天胜利条件 <small>' + (boss ? '下一考验：第' + boss.day + '天 · ' + routeLabel(boss.route) + boss.attack + '冲击' : '最后一天') + '</small></strong><span class="' + (o.topics === 3 ? 'done' : '') + '">' + (o.topics === 3 ? '✓' : '○') + ' 完成三项生态课题 · ' + o.topics + '/3</span><span>○ 生命大于0，守到第30天</span>';
     $('#forecast-token').textContent = '预警 ' + s.forecastTokens + '/4 · 今晚已削弱' + (s.forecastReduction || 0);
-    $('#mitigate-button').disabled = s.forecastTokens < 1 || (s.forecastReduction || 0) >= 12;
+    const canMitigate = s.forecastTokens > 0 && (s.forecastReduction || 0) < 12;
+    $('#mitigate-button').disabled = !canMitigate;
+    $('#mitigate-button').classList.toggle('action-ready', canMitigate);
+    $('#topics-button').classList.toggle('action-ready', D.topics.some(topic => E.topicStatus(s, topic.id).ready));
     $('#habitat-bars').innerHTML = ['water', 'meadow', 'forest'].map(r => '<article class="habitat route-' + r + '"><div><b>' + D.routes[r].icon + ' ' + D.routes[r].name + '</b><span>' + s.habitats[r] + '/3级</span></div><div class="habitat-pips">' + [1,2,3].map(n => '<i class="' + (s.habitats[r] >= n ? 'on' : '') + '"></i>').join('') + '</div><p>' + D.routes[r].benefit + '</p></article>').join('');
     const foliage = s.habitats.forest, grass = s.habitats.meadow, water = s.habitats.water;
     $('#island-world').innerHTML = '<div class="scene-sun"></div><div class="scene-cloud"></div><div class="scene-island"></div><div class="scene-river"></div><div class="scene-forest">' + (foliage ? '🌲'.repeat(foliage) + '🌳' : '🌱') + '</div><div class="scene-meadow">' + (grass ? '🌾'.repeat(grass) + '🌼' : '🌱') + '</div><div class="scene-water">' + (water ? '🪷'.repeat(water) : '〰') + '</div><div class="scene-animals">' + s.species.map(id => D.species.find(x => x.id === id).icon).join(' ') + '</div><span class="scene-caption">' + (s.species.length ? s.species.length + ' 种物种已定居' : '从生境开始，逐步恢复食物网') + '</span>';
