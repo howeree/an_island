@@ -65,7 +65,7 @@
       habitats: { water: 0, meadow: 0, forest: 0 }, species: [], facilities: [], topics: [],
       safeNights: { water: 0, meadow: 0, forest: 0 }, firstMeadow: false, owlDrawn: false,
       energy: 3, block: 0, lastRoute: null, combos: 0, dailyCombos: 0, cardsPlayed: 0,
-      upgrades: {}, deck: { draw: [], discard: [], hand: [], played: [] }, retained: null, swapped: false, swapsUsed: 0,
+      upgrades: {}, deck: { draw: [], discard: [], hand: [], played: [] }, retained: null, swapped: false, swapsUsed: 0, singleSwapUsed: false,
       history: [], lastLog: '先看看今晚的冲击，再选择建设或防御。', status: 'playing', rewardPending: false };
     s.forecasts = Array.from({ length: D.totalDays }, (_, i) => {
       const day = i + 1, act = Math.floor(i / 10), threat = D.threats[Math.floor(random(s) * D.threats.length)];
@@ -279,22 +279,36 @@
     s.deck.discard.push(...s.deck.hand.filter(c => c !== held), ...s.deck.played);
     s.deck.hand = held ? [held] : []; s.deck.played = [];
     s.energy = 3 + Math.min(1, s.energy); s.day++;
-    s.lastRoute = null; s.dailyCombos = 0; s.retained = null; s.swapped = false; s.swapsUsed = 0;
+    s.lastRoute = null; s.dailyCombos = 0; s.retained = null; s.swapped = false; s.swapsUsed = 0; s.singleSwapUsed = false;
     startDay(s);
     s.rewardPending = (s.day - 1) % 5 === 0;
     return d;
   }
   function swap(s) {
     const used = s.swapsUsed ?? (s.swapped ? 1 : 0);
-    if (s.status !== 'playing' || s.rewardPending || used >= 2 || (used === 1 && s.energy < 1)) return false;
+    if (s.status !== 'playing' || s.rewardPending || used >= 2 || s.energy < 1) return false;
     const old = s.deck.hand.filter(c => c.uid !== s.retained);
     if (!old.length) return false;
-    if (used === 1) s.energy--;
+    s.energy--;
     s.swapsUsed = used + 1; s.swapped = true;
     s.deck.hand = s.deck.hand.filter(c => c.uid === s.retained);
     draw(s, old.length);
     s.deck.discard.push(...old); draw(s, Math.max(0, 5 - s.deck.hand.length));
-    s.lastLog = (used === 0 ? '免费' : '花费1行动力') + '重抽手牌（今天第' + s.swapsUsed + '/2次）。保留的牌不会被换掉。'; return true;
+    s.lastLog = '花费1行动力重抽手牌（今天第' + s.swapsUsed + '/2次）。保留的牌不会被换掉。'; return true;
+  }
+  function swapOne(s, uid) {
+    if (s.status !== 'playing' || s.rewardPending || s.singleSwapUsed || (!s.deck.draw.length && !s.deck.discard.length)) return false;
+    const index = s.deck.hand.findIndex(c => c.uid === uid);
+    if (index < 0) return false;
+    const old = s.deck.hand.splice(index, 1)[0];
+    draw(s, 1);
+    const replacement = s.deck.hand.pop();
+    if (!replacement) { s.deck.hand.splice(index, 0, old); return false; }
+    s.deck.hand.splice(index, 0, replacement); s.deck.played.push(old);
+    if (s.retained === uid) s.retained = null;
+    s.singleSwapUsed = true;
+    s.lastLog = '免费替换「' + getCard(old.cardId, s).title + '」（今日单张换牌已使用）。';
+    return replacement.uid;
   }
   function guard(s) {
     if (s.status !== 'playing' || s.rewardPending || s.energy < 1) return false;
@@ -334,5 +348,5 @@
     if (c.speciesChoice && (!s.species.includes('bee') || !s.species.includes('owl')) && owned.filter(i => i.cardId === c.id).length <= 1) return false;
     return !c.build || s.habitats[c.build] >= 2 || owned.filter(i => i.cardId === c.id).length > 1;
   }
-  window.Ecosystem = { random, shuffle, instance, getCard, createInitialState, draw, previewCard, effectText, play, defense, objectives, endDay, swap, guard, rewardOptions, reward, canRemove, completeTopic, topicStatus, speciesOptions, facilityOptions, weatherForDay, effectiveCost, moistureMax, mitigate, nextRoute };
+  window.Ecosystem = { random, shuffle, instance, getCard, createInitialState, draw, previewCard, effectText, play, defense, objectives, endDay, swap, swapOne, guard, rewardOptions, reward, canRemove, completeTopic, topicStatus, speciesOptions, facilityOptions, weatherForDay, effectiveCost, moistureMax, mitigate, nextRoute };
 })();

@@ -102,6 +102,17 @@
         this.render({ drawnUids: this.state.deck.hand.filter(card => card.uid !== retained).map(card => card.uid) });
       } finally { this.busy = false; }
     },
+    async swapSingle(uid) {
+      if (this.busy || U.isModalOpen() || !this.state) return;
+      const oldHand = new Set(this.state.deck.hand.map(card => card.uid));
+      const replacementUid = E.swapOne(this.state, uid);
+      if (!replacementUid) { U.toast(this.state.singleSwapUsed ? '今天已经免费替换过一张牌。' : '牌库暂无可替换的牌。'); return; }
+      this.busy = true;
+      try {
+        this.save(); await U.playSwapAnimation([uid]);
+        this.render({ drawnUids: this.state.deck.hand.filter(card => !oldHand.has(card.uid)).map(card => card.uid) });
+      } finally { this.busy = false; }
+    },
     retain(uid) {
       if (this.busy || !this.state || this.state.rewardPending || !this.state.deck.hand.some(c => c.uid === uid)) return;
       this.state.retained = this.state.retained === uid ? null : uid; this.render();
@@ -152,7 +163,7 @@
     if (keep) { Game.retain(keep.dataset.keep); return; }
     const button = event.target.closest('[data-action]');
     if (button) { Game.action(button.dataset.action); return; }
-    if (event.target.closest('[data-card-uid]')) U.toast('按住牌向上拖动，看到绿色提示后松手。也可按 Enter 出牌。');
+    if (event.target.closest('[data-card-uid]')) U.toast('向上拖动可出牌；拖到右侧牌库可免费替换这张。也可按 Enter 出牌。');
   });
   document.addEventListener('keydown', event => {
     if (event.target.closest('button, select, input')) return;
@@ -161,13 +172,20 @@
     if (event.key === 'Escape' && !Game.state?.rewardPending) U.closeModal();
   });
   const DRAG_THRESHOLD = 72;
+  function overSwapZone(event) {
+    const zone = document.querySelector('#single-swap-zone');
+    if (!zone || zone.classList.contains('disabled')) return false;
+    const rect = zone.getBoundingClientRect();
+    return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  }
   function restore(current) {
     if (current.placeholder?.parentNode) current.placeholder.replaceWith(current.card);
-    current.card.classList.remove('dragging-card', 'ready-to-play');
+    current.card.classList.remove('dragging-card', 'ready-to-play', 'swap-ready');
     if (current.originalStyle !== null && current.card.setAttribute) current.card.setAttribute('style', current.originalStyle);
     else current.card.removeAttribute('style');
-    document.body.classList.remove('card-drag-active');
+    document.body.classList.remove('card-drag-active', 'card-over-deck');
     document.querySelector('#play-drop-zone')?.classList.remove('active');
+    document.querySelector('#single-swap-zone')?.classList.remove('active');
   }
   document.addEventListener('pointerdown', event => {
     if (event.target.closest('button') || drag || Game.busy || U.isModalOpen()) return;
@@ -181,8 +199,9 @@
   });
   document.addEventListener('pointermove', event => {
     if (!drag || drag.pointerId !== event.pointerId) return;
-    const up = drag.startY - event.clientY;
-    if (!drag.active && up > 7 && up > Math.abs(event.clientX - drag.startX) * .65) {
+    const up = drag.startY - event.clientY, across = event.clientX - drag.startX;
+    const overDeck = overSwapZone(event);
+    if (!drag.active && ((up > 7 && up > Math.abs(across) * .65) || across > 7 || overDeck)) {
       drag.active = true; drag.placeholder = document.createElement('div');
       drag.placeholder.className = 'card-placeholder';
       Object.assign(drag.placeholder.style, { width: drag.rect.width + 'px', height: drag.rect.height + 'px' });
@@ -196,17 +215,23 @@
       event.preventDefault();
       drag.card.style.left = (event.clientX - drag.offsetX) + 'px';
       drag.card.style.top = (event.clientY - drag.offsetY) + 'px';
-      drag.card.classList.toggle('ready-to-play', up >= DRAG_THRESHOLD);
-      document.querySelector('#play-drop-zone')?.classList.toggle('active', up >= DRAG_THRESHOLD);
+      drag.overSwap = overDeck;
+      drag.card.classList.toggle('swap-ready', overDeck);
+      drag.card.classList.toggle('ready-to-play', !overDeck && up >= DRAG_THRESHOLD);
+      document.body.classList.toggle('card-over-deck', overDeck);
+      document.querySelector('#single-swap-zone')?.classList.toggle('active', overDeck);
+      document.querySelector('#play-drop-zone')?.classList.toggle('active', !overDeck && up >= DRAG_THRESHOLD);
     }
   }, { passive: false });
   function finish(event, cancelled = false) {
     if (!drag || drag.pointerId !== event.pointerId) return;
     const current = drag;
-    const use = !cancelled && current.active && current.startY - event.clientY >= DRAG_THRESHOLD;
+    const exchange = !cancelled && current.active && current.overSwap;
+    const use = !exchange && !cancelled && current.active && current.startY - event.clientY >= DRAG_THRESHOLD;
     restore(current); drag = null;
     if (current.active) suppressClick = Date.now() + 350;
-    if (use) Game.selectCard(current.uid);
+    if (exchange) Game.swapSingle(current.uid);
+    else if (use) Game.selectCard(current.uid);
   }
   document.addEventListener('pointerup', e => finish(e));
   document.addEventListener('pointercancel', e => finish(e, true));

@@ -29,8 +29,8 @@ function give(s, id) { const c = E.instance(s, id); s.deck.hand.push(c); return 
   const s=fresh(), keep=s.deck.hand[0].uid; s.retained=keep;
   E.endDay(s); assert(s.deck.hand.some(c=>c.uid===keep)); assert.equal(s.deck.hand.length,5); assert.equal(s.energy,4);
   const ids=s.deck.hand.map(c=>c.uid);
-  assert(E.swap(s)); assert.equal(s.energy,4,'First exchange is free'); assert.equal(s.swapsUsed,1);
-  assert(E.swap(s)); assert.equal(s.energy,3,'Second exchange costs one energy'); assert.equal(s.swapsUsed,2);
+  assert(E.swap(s)); assert.equal(s.energy,3,'First full-hand exchange costs one energy'); assert.equal(s.swapsUsed,1);
+  assert(E.swap(s)); assert.equal(s.energy,2,'Second full-hand exchange also costs one energy'); assert.equal(s.swapsUsed,2);
   assert.equal(E.swap(s),false,'Third exchange is not allowed');
   assert(new Set(Object.values(s.deck).flat().map(c=>c.uid)).size===14);
   assert.notDeepEqual(ids,s.deck.hand.map(c=>c.uid));
@@ -38,9 +38,17 @@ function give(s, id) { const c = E.instance(s, id); s.deck.hand.push(c); return 
 }
 {
   const s=fresh(); s.energy=0;
-  assert(E.swap(s),'Free exchange works at zero energy'); assert.equal(s.energy,0);
-  assert.equal(E.swap(s),false,'Paid second exchange needs one energy');
+  assert.equal(E.swap(s),false,'Full-hand exchange always needs one energy');
   s.energy=1; assert(E.swap(s)); assert.equal(s.energy,0);
+}
+{
+  const s=fresh(), target=s.deck.hand[2].uid, energy=s.energy, size=s.deck.hand.length;
+  const replacement=E.swapOne(s,target);
+  assert(replacement,'One card can be exchanged for free'); assert.equal(s.energy,energy); assert.equal(s.deck.hand.length,size);
+  assert(!s.deck.hand.some(c=>c.uid===target)); assert(s.deck.played.some(c=>c.uid===target));
+  assert.equal(s.deck.hand[2].uid,replacement,'Replacement stays in the dragged card slot');
+  assert.equal(E.swapOne(s,s.deck.hand[0].uid),false,'Free single-card exchange is limited to once per day');
+  E.endDay(s); assert.equal(s.singleSwapUsed,false,'Single-card exchange resets the next day');
 }
 {
   const s=fresh(); s.deck.draw=[]; s.deck.discard=[]; s.deck.hand=[];

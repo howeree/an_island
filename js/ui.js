@@ -21,7 +21,7 @@
     { target: '.metric-strip', title: '认识六项资源', text: '生命归零会失败，护盾抵挡今晚伤害；种子和水分用于建设，研究用于课题。生态压力过高会减产、少抽牌。' },
     { target: '#forecast-strip', title: '先看危机再出牌', text: '这里公开今晚的冲击。湿地、草灌、森林分别抵挡对应危机；旁边的预计伤害会随出牌更新。' },
     { target: '#combo-strip', title: '行动力与连携', text: '每天恢复3行动力。按水 → 草 → 林 → 水接牌，可额外获得护盾和研究；通用牌不断链。' },
-    { target: '#action-cards', title: '向上拖牌使用', text: '牌面显示实际收益，向上拖动后松手即可出牌。每天可换牌两次：首次免费，第二次耗1行动力。' },
+    { target: '.hand-table', title: '拖牌使用或替换', text: '向上拖动并松手即可出牌。拖到右侧带问号的牌库，可免费替换这一张，每天一次；整手换牌每次消耗1行动力。' },
     { target: '#end-day-button', title: '确认伤害，结束今天', text: '看过预计伤害再结束当天。右下角可跳过引导，以后也能从「规则」重看。' }
   ];
   let tutorialIndex = -1, tutorialBound = false, tutorialTimer;
@@ -150,8 +150,12 @@
     $('#last-log').textContent = s.lastLog;
     $('#guard-button').disabled = s.energy < 1;
     const swapsUsed = s.swapsUsed ?? (s.swapped ? 1 : 0);
-    $('#swap-button').disabled = swapsUsed >= 2 || (swapsUsed === 1 && s.energy < 1) || !s.deck.hand.some(c => c.uid !== s.retained);
-    $('#swap-button').textContent = swapsUsed === 0 ? '免费换牌 · 1/2' : swapsUsed === 1 ? '换牌 · 1⚡ · 2/2' : '今天已换2次';
+    $('#swap-button').disabled = swapsUsed >= 2 || s.energy < 1 || !s.deck.hand.some(c => c.uid !== s.retained);
+    $('#swap-button').textContent = swapsUsed < 2 ? '整手换牌 · 1⚡ · ' + (swapsUsed + 1) + '/2' : '今天已整手换2次';
+    const singleAvailable = !s.singleSwapUsed && !!s.deck.hand.length && s.deck.draw.length + s.deck.discard.length > 0;
+    $('#single-swap-zone').classList.toggle('disabled', !singleAvailable);
+    $('#single-swap-zone').title = singleAvailable ? '把一张手牌拖到这里，免费替换；每天一次' : s.singleSwapUsed ? '今天的免费单张换牌已使用' : '牌库暂无可抽取的牌';
+    $('#single-swap-label').innerHTML = singleAvailable ? '拖到这里<br>免费换1张' : s.singleSwapUsed ? '今日已使用' : '暂无可换牌';
     $('#end-day-button').textContent = d.damage ? '结束 · −' + d.damage + '生命' : '结束今天 →';
     $('#end-day-button').classList.toggle('risky', d.damage > 0);
   }
@@ -163,7 +167,7 @@
       '<article><b>04 · 设施只能放3座</b><p>拖出「设施规划」选永久设施；满槽时可替换。气象站、实验室等各自改变运营策略。</p></article>' +
       '<article><b>05 · 管理压力与天气</b><p>水分溢出、兔群失衡和入侵季会增加压力。压力≥4降低每天种子收入；≥7次日少抽1张；达到10今晚额外受4伤害。</p></article>' +
       '<article><b>06 · 完成三项课题</b><p>点击「生态课题」查看具体条件。每项需花5研究点提交。第30天结束时三项都完成且生命大于0，即获胜。</p></article></div>' +
-      '<p class="modal-note">每天最多换牌两次：第一次免费，第二次花1行动力；已标记留到明天的牌不会被换掉。功能牌提示：接力行动零费获得1行动力；水力调度用2水分换1行动力；重新勘察换掉其余手牌；定向检索可指定1张手牌换新牌。换出的牌今天不会立刻抽回。连携顺序：水 → 草 → 林 → 水，每接对一次额外护盾+3、研究+1。每天3行动力，剩余最多带1点到次日；每5天可在营地调整牌组。存档保存在本浏览器；旧版远征仍在原存档键下，但本版不能继续。</p><button class="button primary" data-action="close-modal">开始规划</button>');
+      '<p class="modal-note">把手牌拖到右侧牌库，可免费替换这一张，每天一次；整手换牌每天最多两次，每次花1行动力，已标记留到明天的牌不会参与整手换牌。功能牌提示：接力行动零费获得1行动力；水力调度用2水分换1行动力；重新勘察换掉其余手牌；定向检索可指定1张手牌换新牌。换出的牌今天不会立刻抽回。连携顺序：水 → 草 → 林 → 水，每接对一次额外护盾+3、研究+1。每天3行动力，剩余最多带1点到次日；每5天可在营地调整牌组。存档保存在本浏览器；旧版远征仍在原存档键下，但本版不能继续。</p><button class="button primary" data-action="close-modal">开始规划</button>');
     if (s?.status === 'playing') $('#modal-root .modal-card > .button.primary')?.insertAdjacentHTML('beforebegin', '<button class="button" data-action="tutorial">重看逐步引导</button> ');
   }
   function openSpecies(s, uid) {
