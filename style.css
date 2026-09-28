@@ -50,3 +50,17 @@
 .action-cards{align-items:stretch}
 .action-cards .action-card{height:auto;min-height:244px;max-height:none;aspect-ratio:auto}
 @media(max-width:650px){.game-header h1{font-size:13px;letter-spacing:0;white-space:nowrap}}
+/* A restrained nature-themed rating cue for consecutive combos. */
+.combo-banner{--combo-main:#8fc89a;--combo-accent:#d6bd6a;top:18%;bottom:auto;width:min(300px,82vw);padding:14px 22px 13px;border:0;border-radius:0;background:transparent;color:#f4f5e8;text-align:center;box-shadow:none;transform:translate(-50%,8px) scale(.9);transition:none;overflow:visible;isolation:isolate}
+.combo-banner.combo-great{--combo-main:#a8d69a;--combo-accent:#e1c56d}
+.combo-banner.combo-excellent{--combo-main:#c4dd91;--combo-accent:#f0d27c}
+.combo-banner strong{position:relative;z-index:2;display:block;font-size:28px;line-height:1;font-weight:900;letter-spacing:3px;color:var(--combo-accent);text-shadow:0 2px 8px #142e28;white-space:nowrap}
+.combo-banner>span,.combo-banner>small{position:relative;z-index:2;display:block;text-shadow:0 1px 4px #102c25,0 0 9px #102c25}.combo-banner>span{margin-top:6px;font-size:13px;font-weight:800;letter-spacing:1.5px}.combo-banner>small{margin-top:3px;font-size:10px;color:#edf5e8}
+.combo-banner::before{content:'';position:absolute;z-index:-1;inset:-8px;border:1px solid var(--combo-main);border-radius:16px;opacity:0}
+.combo-banner>i{position:absolute;z-index:-1;left:50%;top:50%;width:7px;height:11px;border-radius:90% 0 90% 0;background:var(--combo-main);opacity:0;transform:translate(-50%,-50%) rotate(35deg)}
+.combo-banner.visible{opacity:1!important;animation:combo-pop 1.4s cubic-bezier(.2,.78,.3,1) both}.combo-banner.visible::before{animation:combo-ring .75s ease-out both}.combo-banner.visible>i{animation:combo-spark .75s ease-out var(--spark-delay) both}
+@keyframes combo-pop{0%{opacity:0;transform:translate(-50%,9px) scale(.88)}18%{opacity:1;transform:translate(-50%,-3px) scale(1.04)}34%,82%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-17px) scale(1)}}
+@keyframes combo-ring{0%{opacity:.65;scale:.9}100%{opacity:0;scale:1.15}}
+@keyframes combo-spark{0%{opacity:.85;translate:0 0;scale:.7}75%{opacity:.65}100%{opacity:0;translate:var(--spark-x) var(--spark-y);scale:1;rotate:90deg}}
+@media(max-width:650px){.combo-banner{top:23%;padding:12px 18px}.combo-banner strong{font-size:24px}}
+@media(prefers-reduced-motion:reduce){.combo-banner.visible{opacity:1!important}.combo-banner::before,.combo-banner>i{display:none}}

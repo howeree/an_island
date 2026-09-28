@@ -52,7 +52,7 @@
           this.save(); await U.playCardAnimation(uid);
           window.IslandAudio.choice();
           this.render({ drawnUids: this.state.deck.hand.filter(card => !oldHand.has(card.uid)).map(card => card.uid) });
-          if (effect.combo) U.flashCombo();
+          if (effect.combo) U.flashCombo(this.state.dailyCombos);
         }
       } finally { this.busy = false; }
     },

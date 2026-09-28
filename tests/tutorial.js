@@ -16,13 +16,17 @@ global.localStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>st
 require('../js/data.js');require('../js/ecosystem.js');require('../js/ui.js');
 assert(IslandUI.startTutorial({auto:true}));
 const overlay=nodes.get('#tutorial-overlay'), panel=nodes.get('#tutorial-panel'), skip=nodes.get('#tutorial-skip');
-assert(overlay.classList.contains('open'));assert.match(panel.innerHTML,/1 \/ 16/);
+assert(overlay.classList.contains('open'));assert.match(panel.innerHTML,/1 \/ 6/);
 assert.equal(overlay['aria-hidden'],'false');
-overlay.listeners.click({target:panel});assert.match(panel.innerHTML,/2 \/ 16/);
+overlay.listeners.click({target:panel});assert.match(panel.innerHTML,/2 \/ 6/);
 let stopped=false;skip.listeners.click({stopPropagation(){stopped=true;}});
 assert(stopped);assert(!overlay.classList.contains('open'));
 assert.equal(storage.get('island-tutorial-v1-seen'),'1');
 assert.equal(IslandUI.startTutorial({auto:true}),false,'Seen tutorial does not interrupt the next new game');
 assert(IslandUI.startTutorial(),'Guide can be replayed manually');
-IslandUI.stopTutorial();
+for(let step=2;step<=6;step++){overlay.listeners.click({target:panel});assert.match(panel.innerHTML,new RegExp(step+' \\/ 6'));}
+overlay.listeners.click({target:panel});assert(!overlay.classList.contains('open'),'Finishing step 6 closes the guide');
+IslandUI.flashCombo(1);const combo=nodes.get('#combo-banner');assert.match(combo.innerHTML,/GOOD!/);assert(combo.classList.contains('combo-good'));
+IslandUI.flashCombo(2);assert.match(combo.innerHTML,/GREAT!/);assert(combo.classList.contains('combo-great'));
+IslandUI.flashCombo(3);assert.match(combo.innerHTML,/EXCELLENT!/);assert.match(combo.innerHTML,/生态连携 ×3/);assert(combo.classList.contains('combo-excellent'));
 console.log('Tutorial OK: first-run spotlight, click to advance, skip, persistence, replay.');

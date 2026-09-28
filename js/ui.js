@@ -17,22 +17,12 @@
   }
   const tutorialKey = 'island-tutorial-v1-seen';
   const tutorialSteps = [
-    { target: '#day-label', closest: '.day-meter', title: '每次只前进一天', text: '这一局共30天。每天先打牌、再结束当天；第10、20、30天会有阶段考验。' },
-    { target: '#hp-value', closest: 'article', title: '岛屿生命', text: '今晚没挡住的冲击会扣生命；归零则远征失败。治疗牌和湿地都能帮助恢复。' },
-    { target: '#block-value', closest: 'article', title: '临时护盾', text: '护盾先抵消今晚伤害，通常不会留到明天。森林达到2级后可保留最多4点。' },
-    { target: '#seeds-value', closest: 'article', title: '种子用于建设', text: '建设一处生境需要2种子；草灌成长后，每天会生产更多种子。上限是12。' },
-    { target: '#research-value', closest: 'article', title: '研究点不是单纯攒分', text: '研究点要用来提交生态课题，每项花5点。达成课题条件后，记得主动点击完成。' },
-    { target: '#moisture-value', closest: 'article', title: '水分影响水林建设', text: '建设湿地或森林还需要2水分。雨水能补水，但超过上限会增加生态压力。' },
-    { target: '#pressure-value', closest: 'article', title: '生态压力需要控制', text: '压力≥4会减少每日种子，≥7会少抽牌，达到10时今晚还会受到反噬。' },
-    { target: '#habitat-bars', title: '三种生境分别成长', text: '湿地、草灌、森林不会互相覆盖。它们提供持续收益，也分别抵挡水、草、林系危机。' },
-    { target: '#forecast-strip', title: '先看今晚与后两天', text: '这里公开危机类型与冲击值。提前建设对应生境，或留好防御牌；气象站能看得更远。' },
-    { target: '#defense-preview', title: '这里显示今晚实际伤害', text: '冲击扣除生境抵抗、护盾及预警后，剩余伤害会扣生命。结束前先看一眼。' },
-    { target: '[data-action="topics"]', title: '完成三项生态课题', text: '点击这里查看每项的具体条件。第30天结束时三项都完成、且生命大于0，才算胜利。' },
-    { target: '#energy-value', closest: '.energy-orb', title: '行动力决定今天能做多少', text: '打牌通常会消耗行动力；明天恢复3点，今天未用完的最多额外保留1点。' },
-    { target: '#combo-strip', title: '安排出牌顺序', text: '水 → 草 → 林 → 水，接对一次额外获得3护盾和1研究点。通用牌不会打断顺序。' },
-    { target: '#action-cards', title: '向上拖动手牌来使用', text: '牌面写着现在打出的实际收益。按住牌向上拖动并松手；也可聚焦牌后按 Enter。' },
-    { target: '#swap-button', title: '每天可以换牌两次', text: '第一次免费，第二次花1行动力。你标记为「留到明天」的牌不会被换掉。' },
-    { target: '#end-day-button', title: '准备好了再结束今天', text: '结束后结算今晚危机，并且只进入下一天。右下角可跳过引导，之后随时从「规则」重看。' }
+    { target: '#day-label', closest: '.day-meter', title: '守护岛屿30天', text: '每天结束只前进一天。第30天生命仍在、三项生态课题都已完成，就能获胜；点击「生态课题」可看条件。' },
+    { target: '.metric-strip', title: '认识六项资源', text: '生命归零会失败，护盾抵挡今晚伤害；种子和水分用于建设，研究用于课题。生态压力过高会减产、少抽牌。' },
+    { target: '#forecast-strip', title: '先看危机再出牌', text: '这里公开今晚的冲击。湿地、草灌、森林分别抵挡对应危机；旁边的预计伤害会随出牌更新。' },
+    { target: '#combo-strip', title: '行动力与连携', text: '每天恢复3行动力。按水 → 草 → 林 → 水接牌，可额外获得护盾和研究；通用牌不断链。' },
+    { target: '#action-cards', title: '向上拖牌使用', text: '牌面显示实际收益，向上拖动后松手即可出牌。每天可换牌两次：首次免费，第二次耗1行动力。' },
+    { target: '#end-day-button', title: '确认伤害，结束今天', text: '看过预计伤害再结束当天。右下角可跳过引导，以后也能从「规则」重看。' }
   ];
   let tutorialIndex = -1, tutorialBound = false, tutorialTimer;
   function tutorialSeen() { try { return localStorage.getItem(tutorialKey) === '1'; } catch (_) { return false; } }
@@ -246,7 +236,19 @@
     if (!cards.length || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
     return new Promise(resolve => setTimeout(resolve, 220));
   }
-  function flashCombo() { $('#combo-banner').classList.add('visible'); clearTimeout(comboTimer); comboTimer = setTimeout(() => $('#combo-banner').classList.remove('visible'), 1300); }
+  function flashCombo(count = 1) {
+    const banner = $('#combo-banner');
+    const tier = count >= 3 ? { name: 'excellent', label: 'EXCELLENT!' } :
+      count === 2 ? { name: 'great', label: 'GREAT!' } : { name: 'good', label: 'GOOD!' };
+    const sparks = [[-82,-24],[-48,-50],[0,-58],[50,-48],[84,-18],[62,38],[4,52],[-60,36]];
+    clearTimeout(comboTimer);
+    ['visible', 'combo-good', 'combo-great', 'combo-excellent'].forEach(name => banner.classList.remove(name));
+    banner.innerHTML = '<strong>' + tier.label + '</strong><span>生态连携 ×' + count + '</span><small>护盾 +3 · 研究 +1</small>' +
+      sparks.map((point, index) => '<i style="--spark-x:' + point[0] + 'px;--spark-y:' + point[1] + 'px;--spark-delay:' + index * 22 + 'ms"></i>').join('');
+    void banner.offsetWidth;
+    banner.classList.add('combo-' + tier.name, 'visible');
+    comboTimer = setTimeout(() => banner.classList.remove('visible'), 1400);
+  }
   function renderResults(s) {
     const o = E.objectives(s), won = s.status === 'won';
     $('#results-screen').innerHTML = '<div class="results-wrap"><p class="eyebrow">EXPEDITION / ' + s.seed + '</p><span class="result-icon">' + (won ? '🌳' : '🌱') + '</span><h1>' + (won ? '岛屿，学会了共生' : s.status === 'lost' ? '这次远征止步于第' + s.day + '天' : '守住了岛屿，课题尚未完成') + '</h1><p>' + (won ? '三项生态课题完成，食物网通过了30天的检验。' : s.status === 'lost' ? '生命归零。下次可更早建设对应生境，并在大考验前准备预警与防御。' : '未完成：' + D.topics.filter(t => !s.topics.includes(t.id)).map(t => t.name).join('、') + '。') + '</p><div class="result-stats"><article><b>' + s.hp + '</b><small>剩余生命</small></article><article><b>' + o.topics + '/3</b><small>生态课题</small></article><article><b>' + s.species.length + '</b><small>定居物种</small></article><article><b>' + s.combos + '</b><small>触发连携</small></article></div><details><summary>查看每晚记录</summary><div class="history-list">' + s.history.map(h => '<span>第' + h.day + '天 · ' + h.name + ' · ' + (h.damage ? '损失' + h.damage + '生命' : '平安') + '</span>').join('') + '</div></details><button class="button primary" data-action="confirm-new">再规划一座岛 →</button><button class="button" data-action="deck">回顾牌组</button><button class="button" data-action="topics">回顾课题</button></div>';
