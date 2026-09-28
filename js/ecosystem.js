@@ -49,6 +49,54 @@
     if (amount > 0 && s.moisture + amount > moistureMax(s)) s.pressure = clamp(s.pressure + Math.ceil((s.moisture + amount - moistureMax(s)) / 2), 0, 10);
     s.moisture = clamp(s.moisture + amount, 0, moistureMax(s));
   }
+  function activeEventEffects(s) { return (s.eventEffects || []).filter(effect => effect.untilDay >= s.day); }
+  function eventEffectValue(s, kind, route) {
+    return activeEventEffects(s).filter(effect => effect.kind === kind && (!route || effect.route === route || effect.route === 'all')).reduce((sum, effect) => sum + effect.value, 0);
+  }
+  function currentEvent(s) { return D.events.find(event => event.day === s.eventPending) || null; }
+  function eventChoiceStatus(s, choice) {
+    const r = choice.requires || {}, missing = [];
+    if (r.seeds && s.seeds < r.seeds) missing.push('需要' + r.seeds + '种子');
+    if (r.moisture && s.moisture < r.moisture) missing.push('需要' + r.moisture + '水分');
+    if (r.research && s.research < r.research) missing.push('需要' + r.research + '研究');
+    if (r.species) r.species.filter(id => !s.species.includes(id)).forEach(id => missing.push('需要' + D.species.find(x => x.id === id).name));
+    if (r.anySpecies && !r.anySpecies.some(id => s.species.includes(id))) missing.push('需要' + r.anySpecies.map(id => D.species.find(x => x.id === id).name).join('或'));
+    if (r.minSpecies && s.species.length < r.minSpecies) missing.push('需要' + r.minSpecies + '种定居物种');
+    return { available: !missing.length, requirement: missing.join('·') };
+  }
+  function eventOptions(s) {
+    const event = currentEvent(s);
+    return event ? event.choices.map(choice => ({ ...choice, ...eventChoiceStatus(s, choice) })) : [];
+  }
+  function applyEventImmediate(s, effect = {}) {
+    if (effect.seeds) s.seeds = clamp(s.seeds + effect.seeds, 0, 12);
+    if (effect.research) s.research = Math.max(0, s.research + effect.research);
+    if (effect.moisture) addMoisture(s, effect.moisture);
+    if (effect.pressure) s.pressure = clamp(s.pressure + effect.pressure, 0, 10);
+    if (effect.hp) s.hp = clamp(s.hp + effect.hp, 0, s.maxHp);
+    if (effect.forecast) s.forecastTokens = clamp(s.forecastTokens + effect.forecast, 0, 4);
+  }
+  function applyDailyEventEffect(s, effect) {
+    if (effect.kind === 'dailySeed') s.seeds = clamp(s.seeds + effect.value, 0, 12);
+    if (effect.kind === 'dailyMoisture') addMoisture(s, effect.value);
+    if (effect.kind === 'dailyForecast') s.forecastTokens = clamp(s.forecastTokens + effect.value, 0, 4);
+    if (effect.kind === 'dailyPressureDown') s.pressure = clamp(s.pressure - effect.value, 0, 10);
+  }
+  function chooseEvent(s, id) {
+    const event = currentEvent(s), choice = event?.choices.find(item => item.id === id);
+    if (!event || !choice || !eventChoiceStatus(s, choice).available) return false;
+    applyEventImmediate(s, choice.immediate);
+    s.eventEffects = activeEventEffects(s);
+    if (choice.boon) {
+      const effect = { ...choice.boon, source: event.title, untilDay: s.day + 4 };
+      s.eventEffects.push(effect); applyDailyEventEffect(s, effect);
+    }
+    s.eventHistory = s.eventHistory || [];
+    s.eventHistory.push({ day: event.day, event: event.id, choice: choice.id });
+    s.eventPending = null;
+    s.lastLog = event.icon + ' ' + event.title + '：选择「' + choice.title + '」。';
+    return choice;
+  }
   function effectiveCost(s, c) { return Math.max(0, c.cost - (c.speciesChoice && weatherForDay(s.day) === 'migration' ? 1 : 0)); }
   function speciesOptions(s) {
     return D.species.filter(x => !s.species.includes(x.id) && (
@@ -66,7 +114,7 @@
       safeNights: { water: 0, meadow: 0, forest: 0 }, firstMeadow: false, owlDrawn: false,
       energy: 3, block: 0, lastRoute: null, combos: 0, dailyCombos: 0, cardsPlayed: 0,
       upgrades: {}, deck: { draw: [], discard: [], hand: [], played: [] }, retained: null, swapped: false, swapsUsed: 0, singleSwapUsed: false,
-      history: [], lastLog: '先看看今晚的冲击，再选择建设或防御。', status: 'playing', rewardPending: false };
+      history: [], eventPending: null, eventEffects: [], eventHistory: [], lastLog: '先看看今晚的冲击，再选择建设或防御。', status: 'playing', rewardPending: false };
     s.forecasts = Array.from({ length: D.totalDays }, (_, i) => {
       const day = i + 1, act = Math.floor(i / 10), threat = D.threats[Math.floor(random(s) * D.threats.length)];
       const boss = day % 10 === 0;
@@ -93,7 +141,7 @@
     return { checks, ready: !s.topics.includes(id) && checks.every(Boolean) && s.research >= D.topics.find(t => t.id === id).cost };
   }
   function completeTopic(s, id) {
-    if (s.status !== 'playing' || s.rewardPending || !D.topics.some(t => t.id === id) || !topicStatus(s, id).ready) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending || !D.topics.some(t => t.id === id) || !topicStatus(s, id).ready) return false;
     const topic = D.topics.find(t => t.id === id);
     s.research -= topic.cost; s.topics.push(id);
     s.lastLog = `完成生态课题「${topic.name}」，研究点−${topic.cost}。`;
@@ -149,10 +197,12 @@
     if (weatherForDay(s.day) === 'storm' && c.route === 'water') p.block += 2;
     if (weatherForDay(s.day) === 'invasion' && c.route === 'meadow') p.pressure++;
     if (c.route === 'meadow' && s.species.includes('bee') && !s.firstMeadow) p.research++;
+    if (c.route === 'meadow' && !s.firstMeadow) p.research += eventEffectValue(s, 'firstMeadowResearch');
     if (combo) {
       p.block += 3 + (c.comboBlock || 0); p.research++; p.energy += c.comboEnergy || 0;
       if (!s.dailyCombos && s.habitats.meadow >= 2) p.research++;
       if (!s.dailyCombos && s.facilities.includes('field_lab')) p.research++;
+      if (!s.dailyCombos) p.research += eventEffectValue(s, 'firstComboResearch');
       if (c.route === 'forest' && s.species.includes('owl') && !s.owlDrawn && s.lastRoute === 'meadow' && s.dailyCombos >= 1) p.draw++;
     }
     p.actualSeeds = clamp(s.seeds + p.seeds, 0, 12) - s.seeds;
@@ -185,7 +235,7 @@
     return bits.join(' · ');
   }
   function play(s, uid, choice = {}) {
-    if (s.status !== 'playing' || s.rewardPending) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending) return false;
     const index = s.deck.hand.findIndex(c => c.uid === uid);
     if (index < 0) return false;
     const c = getCard(s.deck.hand[index].cardId, s);
@@ -233,17 +283,19 @@
     if (threat.route === 'forest' && s.moisture === 0) attack += 3;
     if (threat.route === 'water' && s.species.includes('frog')) attack -= 2;
     if (threat.route === 'meadow' && s.species.includes('fox')) attack -= 2;
+    attack -= eventEffectValue(s, 'routeDefense', threat.route);
     attack = Math.max(0, attack - (s.forecastReduction || 0));
     const overload = s.pressure >= 10 ? 4 : 0;
     return { attack, habitat, block: s.block, overload, damage: Math.max(0, attack - habitat - s.block) + overload, absorbed: Math.max(0, attack - habitat) };
   }
   function objectives(s) { return { topics: s.topics.length, alive: s.hp > 0 }; }
   function mitigate(s) {
-    if (s.status !== 'playing' || s.rewardPending || s.forecastTokens < 1 || (s.forecastReduction || 0) >= 12) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending || s.forecastTokens < 1 || (s.forecastReduction || 0) >= 12) return false;
     s.forecastTokens--; s.forecastReduction = (s.forecastReduction || 0) + 3;
     s.lastLog = '消耗1预警标记，今晚冲击−3。'; return true;
   }
   function startDay(s) {
+    s.eventEffects = activeEventEffects(s);
     const weather = weatherForDay(s.day);
     addMoisture(s, s.habitats.water > 0 ? 1 : -1);
     if (s.facilities.includes('reservoir')) addMoisture(s, 1);
@@ -253,13 +305,14 @@
     if (s.species.includes('rabbit') && !s.species.includes('fox')) s.pressure = clamp(s.pressure + 1, 0, 10);
     s.seeds = clamp(s.seeds + s.habitats.meadow + (s.species.includes('rabbit') ? 1 : 0) + (s.facilities.includes('seed_bank') ? 1 : 0) - (s.pressure >= 4 ? 1 : 0), 0, 12);
     s.forecastTokens = clamp(s.forecastTokens + (s.facilities.includes('weather_station') ? 1 : 0) + (s.species.includes('waterbird') && s.moisture >= 4 ? 1 : 0), 0, 4);
+    s.eventEffects.forEach(effect => applyDailyEventEffect(s, effect));
     s.block += s.habitats.forest;
     s.firstMeadow = false; s.owlDrawn = false; s.forecastReduction = 0;
     const target = s.pressure >= 7 ? 4 : 5;
     draw(s, target - s.deck.hand.length);
   }
   function endDay(s) {
-    if (s.status !== 'playing' || s.rewardPending) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending) return false;
     const d = defense(s), threat = s.forecasts[s.day - 1];
     s.hp = Math.max(0, s.hp - d.damage);
     if (!d.damage && s.habitats.water >= 2) s.hp = Math.min(s.maxHp, s.hp + 1);
@@ -282,11 +335,12 @@
     s.lastRoute = null; s.dailyCombos = 0; s.retained = null; s.swapped = false; s.swapsUsed = 0; s.singleSwapUsed = false;
     startDay(s);
     s.rewardPending = (s.day - 1) % 5 === 0;
+    s.eventPending = s.rewardPending && D.events.some(event => event.day === s.day - 1) ? s.day - 1 : null;
     return d;
   }
   function swap(s) {
     const used = s.swapsUsed ?? (s.swapped ? 1 : 0);
-    if (s.status !== 'playing' || s.rewardPending || used >= 2 || s.energy < 1) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending || used >= 2 || s.energy < 1) return false;
     const old = s.deck.hand.filter(c => c.uid !== s.retained);
     if (!old.length) return false;
     s.energy--;
@@ -297,7 +351,7 @@
     s.lastLog = '花费1行动力重抽手牌（今天第' + s.swapsUsed + '/2次）。保留的牌不会被换掉。'; return true;
   }
   function swapOne(s, uid) {
-    if (s.status !== 'playing' || s.rewardPending || s.singleSwapUsed || (!s.deck.draw.length && !s.deck.discard.length)) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending || s.singleSwapUsed || (!s.deck.draw.length && !s.deck.discard.length)) return false;
     const index = s.deck.hand.findIndex(c => c.uid === uid);
     if (index < 0) return false;
     const old = s.deck.hand.splice(index, 1)[0];
@@ -311,7 +365,7 @@
     return replacement.uid;
   }
   function guard(s) {
-    if (s.status !== 'playing' || s.rewardPending || s.energy < 1) return false;
+    if (s.status !== 'playing' || s.rewardPending || s.eventPending || s.energy < 1) return false;
     s.energy--; s.block += s.facilities.includes('ranger_camp') ? 5 : 3;
     s.lastLog = '常备巡护：花费1行动力，获得' + (s.facilities.includes('ranger_camp') ? 5 : 3) + '护盾。'; return true;
   }
@@ -325,7 +379,7 @@
     return options.slice(0, 3).map(c => c.id);
   }
   function reward(s, type, id, offered = []) {
-    if (!s.rewardPending) return false;
+    if (!s.rewardPending || s.eventPending) return false;
     const piles = ['hand', 'draw', 'discard', 'played'], owned = piles.flatMap(k => s.deck[k]);
     if (type === 'add') {
       if (!offered.includes(id)) return false;
@@ -348,5 +402,5 @@
     if (c.speciesChoice && (!s.species.includes('bee') || !s.species.includes('owl')) && owned.filter(i => i.cardId === c.id).length <= 1) return false;
     return !c.build || s.habitats[c.build] >= 2 || owned.filter(i => i.cardId === c.id).length > 1;
   }
-  window.Ecosystem = { random, shuffle, instance, getCard, createInitialState, draw, previewCard, effectText, play, defense, objectives, endDay, swap, swapOne, guard, rewardOptions, reward, canRemove, completeTopic, topicStatus, speciesOptions, facilityOptions, weatherForDay, effectiveCost, moistureMax, mitigate, nextRoute };
+  window.Ecosystem = { random, shuffle, instance, getCard, createInitialState, draw, previewCard, effectText, play, defense, objectives, endDay, swap, swapOne, guard, rewardOptions, reward, canRemove, completeTopic, topicStatus, speciesOptions, facilityOptions, weatherForDay, effectiveCost, moistureMax, mitigate, currentEvent, eventOptions, chooseEvent, activeEventEffects, nextRoute };
 })();

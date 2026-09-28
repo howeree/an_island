@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const nodes=new Map();
 function node(){
   const names=new Set();
-  const value={style:{},innerHTML:'',textContent:'',disabled:false,
+  const value={style:{},innerHTML:'',textContent:'',disabled:false,focus(){},
     classList:{add:x=>names.add(x),remove:x=>names.delete(x),contains:x=>names.has(x),toggle:(x,on)=>on?names.add(x):names.delete(x)}};
   value.closest=()=>value;
   return value;
@@ -32,4 +32,8 @@ s.singleSwapUsed=true;IslandUI.render(s,game);
 assert(nodes.get('#single-swap-zone').classList.contains('disabled'));assert.match(nodes.get('#single-swap-label').innerHTML,/今日已使用/);
 IslandUI.playSwapAnimation([s.deck.hand[0].uid]);
 assert(nodes.get('[data-card-uid="'+s.deck.hand[0].uid+'"]').classList.contains('card-swap-out'));
-console.log('Hand UI OK: symmetrical fan, draw marker, swap-out marker.');
+const eventState=Ecosystem.createInitialState(322);eventState.day=5;Ecosystem.endDay(eventState);
+IslandUI.openEvent(eventState,Ecosystem.currentEvent(eventState),Ecosystem.eventOptions(eventState));
+const eventModal=nodes.get('#modal-root').innerHTML;
+assert.match(eventModal,/传粉缺口/);assert.match(eventModal,/data-event-choice="flower_strip"/);assert.match(eventModal,/event-gain">↑/);assert.match(eventModal,/event-cost">↓/);assert.doesNotMatch(eventModal,/收益 ·|代价 ·/);assert.match(eventModal,/🔒 需要蜜蜂/);
+console.log('Hand UI OK: symmetrical fan, draw marker, swap-out marker, event choices.');

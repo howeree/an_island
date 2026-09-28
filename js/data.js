@@ -66,6 +66,33 @@
     { name: '食叶虫潮', route: 'meadow', icon: '🐛' }, { name: '入侵藤蔓', route: 'meadow', icon: '🌿' },
     { name: '林缘热浪', route: 'forest', icon: '☀' }, { name: '干燥季风', route: 'forest', icon: '🔥' }
   ];
+  const events = [
+    { day: 5, id: 'pollination_gap', icon: '🌼', title: '传粉缺口', text: '花期已至，但传粉者数量不足。你准备如何让花与虫重新建立联系？', choices: [
+      { id: 'flower_strip', title: '补植连续花带', tag: '稳健', gain: '未来5天，每天首张草系牌研究+1。', cost: '立即种子−2。', text: '支付2种子；未来5天，每天首张草系牌额外+1研究。', requires: { seeds: 2 }, immediate: { seeds: -2 }, boon: { kind: 'firstMeadowResearch', value: 1, label: '连续花带：首张草系牌研究+1' } },
+      { id: 'pollinator_survey', title: '扩大传粉调查', tag: '激进', gain: '立即研究+4。', cost: '频繁干预使压力+1。', text: '立即研究+4，但频繁干预使压力+1。', immediate: { research: 4, pressure: 1 } },
+      { id: 'bee_network', title: '让蜂群扩散', tag: '物种解法', gain: '压力−2；未来5天每天种子+1。', cost: '维持蜂群饮水点，水分−1。', text: '需要蜜蜂和1水分；压力−2，未来5天每天种子+1。', requires: { species: ['bee'], moisture: 1 }, immediate: { pressure: -2, moisture: -1 }, boon: { kind: 'dailySeed', value: 1, label: '蜂群扩散：每天种子+1' } }
+    ] },
+    { day: 10, id: 'algae_bloom', icon: '🪷', title: '河湾水华', text: '水面出现异常藻色，湿地食物网正在缺氧。', choices: [
+      { id: 'clean_bay', title: '疏通河湾', tag: '湿地管理', gain: '压力−2；未来5天水系冲击−2。', cost: '疏通会消耗水分−2。', text: '支付2水分，压力−2；未来5天水系冲击额外−2。', requires: { moisture: 2 }, immediate: { moisture: -2, pressure: -2 }, boon: { kind: 'routeDefense', route: 'water', value: 2, label: '河湾疏通：水系冲击−2' } },
+      { id: 'track_bloom', title: '跟踪水华', tag: '研究', gain: '立即研究+4。', cost: '保留样本使压力+1。', text: '立即研究+4，但保留样本使压力+1。', immediate: { research: 4, pressure: 1 } },
+      { id: 'amphibian_watch', title: '让水生物预警', tag: '物种解法', gain: '压力−2；未来5天每天预警+1。', cost: '建设监测点需要种子−2。', text: '需要青蛙或水鸟和2种子；压力−2，未来5天每天预警+1。', requires: { anySpecies: ['frog', 'waterbird'], seeds: 2 }, immediate: { pressure: -2, seeds: -2 }, boon: { kind: 'dailyForecast', value: 1, label: '水生预警：每天预警+1' } }
+    ] },
+    { day: 15, id: 'grazing_imbalance', icon: '🌾', title: '草地啃食失衡', text: '新生草叶被大量啃食，草灌群落的恢复速度开始放缓。', choices: [
+      { id: 'grazing_fence', title: '设置轮休围栏', tag: '稳健', gain: '未来5天草系冲击−3。', cost: '建造围栏使种子−2。', text: '支付2种子；未来5天草系冲击额外−3。', requires: { seeds: 2 }, immediate: { seeds: -2 }, boon: { kind: 'routeDefense', route: 'meadow', value: 3, label: '轮休围栏：草系冲击−3' } },
+      { id: 'tolerate_grazing', title: '容忍短期啃食', tag: '风险换资源', gain: '立即种子+5。', cost: '啃食失衡使压力+2。', text: '立即种子+5，但压力+2。', immediate: { seeds: 5, pressure: 2 } },
+      { id: 'restore_predation', title: '恢复捕食关系', tag: '食物网解法', gain: '压力−3；未来5天每天种子+1。', cost: '跟踪捕食关系需要研究−2。', text: '需要兔群、狐狸和2研究；压力−3，未来5天每天种子+1。', requires: { species: ['rabbit', 'fox'], research: 2 }, immediate: { pressure: -3, research: -2 }, boon: { kind: 'dailySeed', value: 1, label: '捕食平衡：每天种子+1' } }
+    ] },
+    { day: 20, id: 'forest_rodents', icon: '🌰', title: '林下鼠害', text: '鼠类大量取食果实与幼苗，森林更新受到威胁。', choices: [
+      { id: 'manual_patrol', title: '组织人工巡护', tag: '应急', gain: '生命+4；未来5天林系冲击−3。', cost: '调用方案使研究−2。', text: '支付2研究，立即生命+4；未来5天林系冲击额外−3。', requires: { research: 2 }, immediate: { research: -2, hp: 4 }, boon: { kind: 'routeDefense', route: 'forest', value: 3, label: '林下巡护：林系冲击−3' } },
+      { id: 'understory_patch', title: '修复林下斑块', tag: '转化', gain: '立即研究+5。', cost: '修复试验使种子−3。', text: '支付3种子，立即研究+5。', requires: { seeds: 3 }, immediate: { seeds: -3, research: 5 } },
+      { id: 'owl_control', title: '让猫头鹰控鼠', tag: '物种解法', gain: '压力−2；未来5天首次连携研究+1。', cost: '搭建栖架使种子−2。', text: '需要猫头鹰和2种子；压力−2，未来5天每天首次连携研究+1。', requires: { species: ['owl'], seeds: 2 }, immediate: { pressure: -2, seeds: -2 }, boon: { kind: 'firstComboResearch', value: 1, label: '夜行控鼠：首次连携研究+1' } }
+    ] },
+    { day: 25, id: 'migration_corridor', icon: '🐦', title: '迁徙走廊', text: '季节性迁徙进入高峰，岛上各片生境是否能串联，将决定最后的稳定性。', choices: [
+      { id: 'open_corridor', title: '打开湿地走廊', tag: '稳健', gain: '压力−2；未来5天所有冲击−1。', cost: '调水打开通道，水分−2。', text: '支付2水分，压力−2；未来5天所有冲击额外−1。', requires: { moisture: 2 }, immediate: { moisture: -2, pressure: -2 }, boon: { kind: 'routeDefense', route: 'all', value: 1, label: '迁徙走廊：所有冲击−1' } },
+      { id: 'banding_program', title: '集中环志调查', tag: '研究', gain: '立即研究+5。', cost: '密集捕捉使压力+2。', text: '立即研究+5，但压力+2。', immediate: { research: 5, pressure: 2 } },
+      { id: 'self_regulation', title: '交给多样性调节', tag: '多样性解法', gain: '压力−2；未来5天所有冲击−2。', cost: '划出非干预核心区，种子−3。', text: '需要至少4种物种和3种子；压力−2，未来5天所有冲击额外−2。', requires: { minSpecies: 4, seeds: 3 }, immediate: { pressure: -2, seeds: -3 }, boon: { kind: 'routeDefense', route: 'all', value: 2, label: '多样性调节：所有冲击−2' } }
+    ] }
+  ];
   const starterDeck = ['rain', 'rain', 'seed', 'flowers', 'wetland', 'meadow', 'forest', 'patrol', 'survey', 'compost', 'species_scout', 'species_scout', 'facility_plan', 'weather_watch'];
-  window.IslandData = { routes, cards, species, facilities, topics, weathers, threats, starterDeck, version: 4, totalDays: 30 };
+  window.IslandData = { routes, cards, species, facilities, topics, weathers, threats, events, starterDeck, version: 4, totalDays: 30 };
 })();

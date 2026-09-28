@@ -4,6 +4,10 @@ require('../js/data.js'); require('../js/ecosystem.js');
 const assert = require('node:assert/strict'), E = Ecosystem;
 function fresh() { return E.createInitialState(123); }
 function give(s, id) { const c = E.instance(s, id); s.deck.hand.push(c); return c.uid; }
+for (const event of IslandData.events) for (const choice of event.choices) {
+  assert(choice.gain && choice.cost, 'Every ecology-event option explains both benefit and cost');
+  assert(Object.entries(choice.immediate || {}).some(([key,value]) => value < 0 || (key === 'pressure' && value > 0)), 'Every ecology-event option has a mechanical downside');
+}
 {
   const s = fresh();
   E.play(s, s.deck.hand.find(c => c.cardId === 'rain').uid);
@@ -58,11 +62,20 @@ function give(s, id) { const c = E.instance(s, id); s.deck.hand.push(c); return 
 }
 {
   const s=fresh(); s.day=5;
-  E.endDay(s); assert.equal(s.rewardPending,true);
+  E.endDay(s); assert.equal(s.rewardPending,true); assert.equal(s.eventPending,5);
   assert.equal(E.endDay(s),false); assert.equal(E.play(s,s.deck.hand[0].uid),false);
   assert.equal(E.reward(s,'add','rescue',[]),false);
+  const options=E.eventOptions(s); assert.equal(options.length,3); assert.equal(options.find(x=>x.id==='bee_network').available,false);
+  assert(E.chooseEvent(s,'pollinator_survey')); assert.equal(s.research,4); assert.equal(s.pressure,1); assert.equal(s.eventPending,null);
   assert(E.reward(s,'upgrade','rain')); assert.equal(E.getCard('rain',s).block,7);
   assert.equal(s.rewardPending,false);
+}
+{
+  const s=fresh(); s.day=5; s.species.push('bee'); E.endDay(s);
+  assert(E.chooseEvent(s,'bee_network'),'A resident species unlocks its ecology-event answer');
+  assert.equal(s.seeds,4,'The first day of a daily event boon applies immediately');
+  assert.match(E.activeEventEffects(s)[0].label,/蜂群扩散/);
+  E.reward(s,'rest'); E.endDay(s); assert.equal(s.seeds,5,'Event boon continues on following days');
 }
 {
   const s=fresh(), build=s.deck.hand.find(c=>c.cardId==='meadow');

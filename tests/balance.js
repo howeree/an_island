@@ -54,6 +54,12 @@ function camp(s,style) {
   }
   E.reward(s,'rest');
 }
+function resolveEvent(s,style) {
+  const options=E.eventOptions(s).filter(choice=>choice.available);
+  const special=options.find(choice=>choice.tag.includes('解法'));
+  const choice=style==='planned'?(special||options[0]):options[Math.floor(E.random(s)*options.length)];
+  assert(choice&&E.chooseEvent(s,choice.id));
+}
 function run(seed,style) {
   const s=E.createInitialState(seed);
   while(s.status==='playing') {
@@ -70,6 +76,7 @@ function run(seed,style) {
       while(s.energy&&E.defense(s).damage>0) E.guard(s);
     }
     E.endDay(s);
+    if(s.eventPending) resolveEvent(s,style);
     if(s.rewardPending) camp(s,style);
   }
   return s;
@@ -86,4 +93,4 @@ if(require.main===module) {
   assert(counts.random<=30,'Random play should not reliably win the expedition');
   assert(counts.idle===0,'Skipping turns must not win');
 }
-module.exports={choose,chooseMove,decision,completeAvailable,run};
+module.exports={choose,chooseMove,decision,completeAvailable,resolveEvent,run};

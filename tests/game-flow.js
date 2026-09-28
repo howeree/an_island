@@ -5,12 +5,12 @@ global.document={addEventListener(){},querySelector(){return null;}};
 global.addEventListener=()=>{};
 global.localStorage={getItem:k=>elements.get(k)||null,setItem:(k,v)=>elements.set(k,v)};
 require('../js/data.js');require('../js/ecosystem.js');
-let resultShown=false, modal=false, openedSpecies=false, openedExchange=false, visualDraws=[], swappedOut=[];
+let resultShown=false, modal=false, openedSpecies=false, openedExchange=false, openedEvent=false, visualDraws=[], swappedOut=[];
 global.IslandUI={
   showScreen(){},render(_s,_game,visual){visualDraws=visual?.drawnUids||[];},toast(){},closeModal(){modal=false;},isModalOpen:()=>modal,
   renderResults(){resultShown=true;},playCardAnimation:()=>new Promise(r=>setTimeout(r,0)),
   playSwapAnimation(uids){swappedOut=uids;return Promise.resolve();},
-  flashCombo(){},openCamp(){modal=true;},openDeck(){},openGuide(){},startTutorial(){},confirmNew(){},
+  flashCombo(){},openCamp(){modal=true;},openEvent(){openedEvent=true;modal=true;},openDeck(){},openGuide(){},startTutorial(){},confirmNew(){},
   openSpecies(){openedSpecies=true;modal=true;},openFacilities(){modal=true;},openReplaceFacility(){modal=true;},openExchange(){openedExchange=true;modal=true;},openTopics(){},openSystems(){}
 };
 global.IslandAudio={choice(){}};
@@ -58,6 +58,11 @@ const assert=require('node:assert/strict'),{chooseMove}=require('./balance.js');
     while(Game.state.forecastTokens&&Ecosystem.defense(Game.state).damage)Game.action('mitigate');
     while(Game.state.energy&&Ecosystem.defense(Game.state).damage)Game.action('guard');
     Game.endRound();
+    if(Game.state.eventPending){
+      assert(openedEvent&&modal,'Milestone event opens before the camp');
+      const option=Ecosystem.eventOptions(Game.state).find(choice=>choice.available&&choice.tag.includes('解法'))||Ecosystem.eventOptions(Game.state).find(choice=>choice.available);
+      Game.chooseEvent(option.id);
+    }
     if(Game.state.rewardPending){
       const oldDay=Game.state.day;Game.endRound();assert.equal(Game.state.day,oldDay);
       const upgrade=['meadow','wetland','forest','rain','species_scout','compost'].find(id=>!Game.state.upgrades[id]);

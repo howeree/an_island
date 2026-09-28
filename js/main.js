@@ -11,7 +11,9 @@
     readSave() {
       try {
         const s = JSON.parse(localStorage.getItem(KEY));
-        return s?.version === 4 && s.day >= 1 && s.day <= 30 && s.deck?.hand && s.forecasts?.length === 30 && Array.isArray(s.topics) ? s : null;
+        if (!(s?.version === 4 && s.day >= 1 && s.day <= 30 && s.deck?.hand && s.forecasts?.length === 30 && Array.isArray(s.topics))) return null;
+        s.eventPending = s.eventPending || null; s.eventEffects = s.eventEffects || []; s.eventHistory = s.eventHistory || [];
+        return s;
       } catch (_) { return null; }
     },
     render(visual = {}) {
@@ -31,7 +33,8 @@
       if (!s) { U.toast('没有可继续的远征。'); return; }
       this.pendingCampDraw = null;
       this.state = s; U.showScreen('game-screen'); this.render();
-      if (s.rewardPending) this.openCamp();
+      if (s.eventPending) this.openEvent();
+      else if (s.rewardPending) this.openCamp();
       else if (s.status === 'playing') U.startTutorial({ auto: true });
     },
     getHandCards() { return this.state.deck.hand.map(instance => ({ instance, card: E.getCard(instance.cardId, this.state) })); },
@@ -80,9 +83,20 @@
       const drawnUids = this.state.day > previousDay ? this.state.deck.hand.filter(card => card.uid !== retained).map(card => card.uid) : [];
       if (this.state.rewardPending) this.pendingCampDraw = drawnUids;
       this.render({ drawnUids: this.state.rewardPending ? [] : drawnUids });
-      if (this.state.rewardPending && this.state.status === 'playing') this.openCamp();
+      if (this.state.eventPending && this.state.status === 'playing') this.openEvent();
+      else if (this.state.rewardPending && this.state.status === 'playing') this.openCamp();
+    },
+    openEvent() {
+      const event = E.currentEvent(this.state);
+      if (event) U.openEvent(this.state, event, E.eventOptions(this.state));
+    },
+    chooseEvent(id) {
+      if (!this.state || !E.chooseEvent(this.state, id)) return;
+      U.closeModal(); this.render();
+      if (this.state.rewardPending) this.openCamp();
     },
     openCamp() {
+      if (this.state.eventPending) { this.openEvent(); return; }
       if (!this.state.rewardChoices) { this.state.rewardChoices = E.rewardOptions(this.state); this.save(); }
       U.openCamp(this.state, this.state.rewardChoices);
     },
@@ -114,7 +128,7 @@
       } finally { this.busy = false; }
     },
     retain(uid) {
-      if (this.busy || !this.state || this.state.rewardPending || !this.state.deck.hand.some(c => c.uid === uid)) return;
+      if (this.busy || !this.state || this.state.rewardPending || this.state.eventPending || !this.state.deck.hand.some(c => c.uid === uid)) return;
       this.state.retained = this.state.retained === uid ? null : uid; this.render();
     },
     action(name) {
@@ -153,6 +167,8 @@
     if (Date.now() < suppressClick) return;
     const reward = event.target.closest('[data-reward]');
     if (reward) { Game.chooseReward(reward.dataset.reward, reward.dataset.id); return; }
+    const eventChoice = event.target.closest('[data-event-choice]');
+    if (eventChoice) { Game.chooseEvent(eventChoice.dataset.eventChoice); return; }
     const permanent = event.target.closest('[data-permanent]');
     if (permanent) { Game.choosePermanent(permanent.dataset.permanent, permanent.dataset.uid, permanent.dataset.id, permanent.dataset.replace); return; }
     const exchange = event.target.closest('[data-exchange]');
@@ -169,7 +185,7 @@
     if (event.target.closest('button, select, input')) return;
     const card = event.target.closest('[data-card-uid]');
     if (card && ['Enter', ' '].includes(event.key)) { event.preventDefault(); Game.selectCard(card.dataset.cardUid); }
-    if (event.key === 'Escape' && !Game.state?.rewardPending) U.closeModal();
+    if (event.key === 'Escape' && !Game.state?.rewardPending && !Game.state?.eventPending) U.closeModal();
   });
   const DRAG_THRESHOLD = 72;
   function overSwapZone(event) {

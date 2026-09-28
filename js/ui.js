@@ -137,7 +137,8 @@
     $('#habitat-bars').innerHTML = ['water', 'meadow', 'forest'].map(r => '<article class="habitat route-' + r + '"><div><b>' + D.routes[r].icon + ' ' + D.routes[r].name + '</b><span>' + s.habitats[r] + '/3级</span></div><div class="habitat-pips">' + [1,2,3].map(n => '<i class="' + (s.habitats[r] >= n ? 'on' : '') + '"></i>').join('') + '</div><p>' + D.routes[r].benefit + '</p></article>').join('');
     const foliage = s.habitats.forest, grass = s.habitats.meadow, water = s.habitats.water;
     $('#island-world').innerHTML = '<div class="scene-sun"></div><div class="scene-cloud"></div><div class="scene-island"></div><div class="scene-river"></div><div class="scene-forest">' + (foliage ? '🌲'.repeat(foliage) + '🌳' : '🌱') + '</div><div class="scene-meadow">' + (grass ? '🌾'.repeat(grass) + '🌼' : '🌱') + '</div><div class="scene-water">' + (water ? '🪷'.repeat(water) : '〰') + '</div><div class="scene-animals">' + s.species.map(id => D.species.find(x => x.id === id).icon).join(' ') + '</div><span class="scene-caption">' + (s.species.length ? s.species.length + ' 种物种已定居' : '从生境开始，逐步恢复食物网') + '</span>';
-    $('#system-strip').innerHTML = '<span>物种 ' + s.species.length + '/6：' + (s.species.length ? s.species.map(id => D.species.find(x => x.id === id).icon).join(' ') : '尚未引入') + '</span><span>设施 ' + s.facilities.length + '/3：' + (s.facilities.length ? s.facilities.map(id => D.facilities.find(x => x.id === id).icon).join(' ') : '尚未建设') + '</span>';
+    const eventEffects = E.activeEventEffects(s);
+    $('#system-strip').innerHTML = '<span>物种 ' + s.species.length + '/6：' + (s.species.length ? s.species.map(id => D.species.find(x => x.id === id).icon).join(' ') : '尚未引入') + '</span><span>设施 ' + s.facilities.length + '/3：' + (s.facilities.length ? s.facilities.map(id => D.facilities.find(x => x.id === id).icon).join(' ') : '尚未建设') + '</span>' + (eventEffects.length ? '<span class="event-effect">🌿 事件增益：' + eventEffects.map(effect => esc(effect.label) + '（至第' + effect.untilDay + '天）').join(' · ') + '</span>' : '');
     const next = E.nextRoute[s.lastRoute];
     $('#combo-strip').innerHTML = '<span class="chain-label">生态连携</span><b class="' + (next === 'water' ? 'next' : '') + '">💧 水</b><span>→</span><b class="' + (next === 'meadow' ? 'next' : '') + '">🌼 草</b><span>→</span><b class="' + (next === 'forest' ? 'next' : '') + '">🌲 林</b><span>→ 💧</span><small>' + (next ? '接' + routeLabel(next) + '：额外护盾+3、研究+1' : '任意一系起手，顺序相接：护盾+3、研究+1') + ' · 通用牌不断链</small>';
     const hand = game.getHandCards(), center = (hand.length - 1) / 2, drawn = new Set(visual.drawnUids || []);
@@ -169,7 +170,8 @@
       '<article><b>03 · 引入物种</b><p>拖出「物种迁入」后选可定居的物种。蜜蜂与猫头鹰是完成课题的关键；兔群增产但可能推高压力。</p></article>' +
       '<article><b>04 · 设施只能放3座</b><p>拖出「设施规划」选永久设施；满槽时可替换。气象站、实验室等各自改变运营策略。</p></article>' +
       '<article><b>05 · 管理压力与天气</b><p>水分溢出、兔群失衡和入侵季会增加压力。压力≥4降低每天种子收入；≥7次日少抽1张；达到10今晚额外受4伤害。</p></article>' +
-      '<article><b>06 · 完成三项课题</b><p>点击「生态课题」查看具体条件。每项需花5研究点提交。第30天结束时三项都完成且生命大于0，即获胜。</p></article></div>' +
+      '<article><b>06 · 处理生态事件</b><p>每5天会出现一次三选一事件。普通方案使用资源，已定居物种可解锁更强的食物网解法。</p></article>' +
+      '<article><b>07 · 完成三项课题</b><p>点击「生态课题」查看具体条件。每项需花5研究点提交。第30天结束时三项都完成且生命大于0，即获胜。</p></article></div>' +
       '<p class="modal-note">把手牌拖到右侧牌库，可免费替换这一张，每天一次；整手换牌每天最多两次，每次花1行动力，已标记留到明天的牌不会参与整手换牌。功能牌提示：接力行动零费获得1行动力；水力调度用2水分换1行动力；重新勘察换掉其余手牌；定向检索可指定1张手牌换新牌。换出的牌今天不会立刻抽回。连携顺序：水 → 草 → 林 → 水，每接对一次额外护盾+3、研究+1。每天3行动力，剩余最多带1点到次日；每5天可在营地调整牌组。存档保存在本浏览器；旧版远征仍在原存档键下，但本版不能继续。</p><button class="button primary" data-action="close-modal">开始规划</button>');
     if (s?.status === 'playing') $('#modal-root .modal-card > .button.primary')?.insertAdjacentHTML('beforebegin', '<button class="button" data-action="tutorial">重看逐步引导</button> ');
   }
@@ -220,6 +222,11 @@
       return '<button class="reward-card route-' + c.route + '" data-reward="add" data-id="' + id + '"><span>' + c.icon + '</span><small>加入一张 · ' + c.cost + '⚡ · ' + routeLabel(c.route) + '</small><b>' + c.title + '</b><p>' + c.text + '</p></button>';
     }).join('') + '</div><div class="camp-alternatives"><button class="button" data-action="camp-upgrade">强化一种已有牌</button><button class="button" data-action="camp-remove">移除一张牌</button><button class="button" data-reward="rest">休整 · 恢复10生命</button></div><small>强化作用于同名牌的所有副本。精简牌组会提高抽到核心卡的概率。</small>', false);
   }
+  function openEvent(s, event, options) {
+    modal('<p class="eyebrow">ECO EVENT / AFTER DAY ' + event.day + '</p><div class="event-heading"><span>' + event.icon + '</span><div><h2>' + esc(event.title) + '</h2><p>' + esc(event.text) + '</p></div></div><div class="event-choice-grid">' + options.map(choice =>
+      '<button class="event-choice ' + (choice.tag.includes('解法') ? 'species-solution' : '') + '" data-event-choice="' + choice.id + '"' + (choice.available ? '' : ' disabled') + '><small>' + esc(choice.tag) + '</small><b>' + esc(choice.title) + '</b><span class="event-gain">↑ ' + esc(choice.gain) + '</span><span class="event-cost">↓ ' + esc(choice.cost) + '</span>' + (choice.available ? '<em>可选择</em>' : '<em class="locked">🔒 ' + esc(choice.requirement) + '</em>') + '</button>'
+    ).join('') + '</div><p class="modal-note">事件会改变接下来5天的规划。选择后再进入营地调整牌组。</p>', false);
+  }
   function openCampList(s, mode) {
     const all = Object.values(s.deck).flat();
     const list = mode === 'upgrade' ? [...new Set(all.map(c => c.cardId))].filter(id => !s.upgrades[id]).map(id => ({ cardId: id, uid: id })) : all;
@@ -261,5 +268,5 @@
     $('#results-screen').innerHTML = '<div class="results-wrap"><p class="eyebrow">EXPEDITION / ' + s.seed + '</p><span class="result-icon">' + (won ? '🌳' : '🌱') + '</span><h1>' + (won ? '岛屿，学会了共生' : s.status === 'lost' ? '这次远征止步于第' + s.day + '天' : '守住了岛屿，课题尚未完成') + '</h1><p>' + (won ? '三项生态课题完成，食物网通过了30天的检验。' : s.status === 'lost' ? '生命归零。下次可更早建设对应生境，并在大考验前准备预警与防御。' : '未完成：' + D.topics.filter(t => !s.topics.includes(t.id)).map(t => t.name).join('、') + '。') + '</p><div class="result-stats"><article><b>' + s.hp + '</b><small>剩余生命</small></article><article><b>' + o.topics + '/3</b><small>生态课题</small></article><article><b>' + s.species.length + '</b><small>定居物种</small></article><article><b>' + s.combos + '</b><small>触发连携</small></article></div><details><summary>查看每晚记录</summary><div class="history-list">' + s.history.map(h => '<span>第' + h.day + '天 · ' + h.name + ' · ' + (h.damage ? '损失' + h.damage + '生命' : '平安') + '</span>').join('') + '</div></details><button class="button primary" data-action="confirm-new">再规划一座岛 →</button><button class="button" data-action="deck">回顾牌组</button><button class="button" data-action="topics">回顾课题</button></div>';
     showScreen('results-screen');
   }
-  window.IslandUI = { showScreen, render, toast, isModalOpen, closeModal, openGuide, openDeck, openCamp, openCampList, openSpecies, openFacilities, openReplaceFacility, openExchange, openTopics, openSystems, startTutorial, stopTutorial, confirmNew, playCardAnimation, playSwapAnimation, flashCombo, renderResults };
+  window.IslandUI = { showScreen, render, toast, isModalOpen, closeModal, openGuide, openDeck, openCamp, openEvent, openCampList, openSpecies, openFacilities, openReplaceFacility, openExchange, openTopics, openSystems, startTutorial, stopTutorial, confirmNew, playCardAnimation, playSwapAnimation, flashCombo, renderResults };
 })();
